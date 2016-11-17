@@ -60,7 +60,7 @@ class CRM_Iparl_Page_IparlWebhook extends CRM_Core_Page {
     // @todo Look up action using iParl API
 
     // @todo Create activity.
-
+    $this->recordActivity($input, $contact);
 
     echo "OK";
     exit;
@@ -125,5 +125,25 @@ class CRM_Iparl_Page_IparlWebhook extends CRM_Core_Page {
    */
   public function createContact($input) {
     // @todo
+  }
+  /**
+   * Record the activity.
+   */
+  public function recordActivity($input, $contact) {
+
+    $activity_target_type = (int) civicrm_api3('OptionValue', 'getvalue',
+      ['return' => "value", 'option_group_id' => "activity_contacts", 'name' => "Activity Targets"]);
+
+    $activity_type_declaration= (int) civicrm_api3('OptionValue', 'getvalue',
+      ['return' => "value", 'option_group_id' => "activity_type", 'name' => "iparl"]);
+
+    $result = civicrm_api3('Activity', 'create', [
+      'activity_type_id' => $activity_type_declaration,
+      'target_id' => $contact['id'],
+      'source_contact_id' => $contact['id'],
+      'subject' => 'Took action',
+      'details' => '',
+    ]);
+    return $result;
   }
 }

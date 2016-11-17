@@ -29,6 +29,34 @@ function iparl_civicrm_xmlMenu(&$files) {
  */
 function iparl_civicrm_install() {
   _iparl_civix_civicrm_install();
+
+  /**
+   * Helper function for creating data structures.
+   *
+   * @param string $entity - name of the API entity.
+   * @param Array $params_min parameters to use for search.
+   * @param Array $params_extra these plus $params_min are used if a create call
+   *              is needed.
+   */
+  $api_get_or_create = function ($entity, $params_min, $params_extra) {
+    $params_min += ['sequential' => 1];
+    $result = civicrm_api3($entity, 'get', $params_min);
+    if (!$result['count']) {
+      // Couldn't find it, create it now.
+      $result = civicrm_api3($entity, 'create', $params_extra + $params_min);
+    }
+    return $result['values'][0];
+  };
+
+  // We need an iParl activity type
+  $activity_type = $api_get_or_create('OptionValue', [
+    'option_group_id' => "activity_type",
+    'name' => "iparl",
+  ],
+  [ 'label' => 'iParl action']);
+
+  $url = CRM_Utils_System::url('civicrm/admin/iparl');
+  CRM_Core_Session::setStatus(ts("You must now <a href='$url'>configure the iParl extension</a>."));
 }
 
 /**
