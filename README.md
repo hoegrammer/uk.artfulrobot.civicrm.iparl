@@ -16,6 +16,24 @@ You'll need a functioning iParl account before starting.
 Install the extension in the normal way. A pop-up will tell you to go to
 `civicrm/admin/iparl` to configure things. That page has the instructions.
 
+You can test it like
+    curl -k -L 'https://your-webhook-url' \
+        -d secret=helloHorseHeadLikeYourJumper \
+        -d name=Jo \
+        -d lastname=Bloggs \
+        -d email=jo@exampled.com \
+        -d actionid=1
+
+Where your-webhook-url you can get from the settings page (it's basically your
+domain `/civicrm/iparl-webhook`) and your secret must match.
+
+If it works, you should simply see `OK`. If it doesn't work, check your server
+logs. If you enabled logging on the iParl extension's settings page, you'll find
+the file in CiviCRM's ConfigAndLog directory. Hint: it has iparl in the name.
+
+First time you call it you should see a new contact created. Second time you
+should just see another activity added to that contact's record.
+
 ## About
 
 This was written by Rich Lott ([Artful Robot](https://artfulrobot.uk)) who
