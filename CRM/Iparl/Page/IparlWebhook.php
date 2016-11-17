@@ -41,37 +41,60 @@
  */
 
 class CRM_Iparl_Page_IparlWebhook extends CRM_Core_Page {
+
+  public $iparl_logging;
+  /**
+   * Log, if logging is enabled.
+   */
+  public function iparlLog($message, $priority=PEAR_LOG_INFO) {
+
+    if (!isset($this->iparl_logging)) {
+      $this->iparl_logging = (int) civicrm_api3('Setting', 'getvalue', array( 'name' => "iparl_logging", 'group' => 'iParl Integration Settings' ));
+    }
+    if (!$this->iparl_logging) {
+      // Logging disabled.
+      return;
+    }
+
+    $message = "From $_SERVER[REMOTE_ADDR]: $message";
+    CRM_Core_Error::debug_log_message($message, $out=FALSE, $component='iparl', $priority);
+  }
   public function run() {
-    // Example: Set the page-title dynamically; alternatively, declare a static title in xml/Menu/*.xml
-    //CRM_Utils_System::setTitle(ts('IparlWebhook'));
 
-    // Example: Assign a variable for use in a template
-    //$this->assign('currentTime', date('Y-m-d H:i:s'));
-    //
-    // Check secret.
-    foreach (['secret', 'name', 'lastname', 'email'] as $_) {
-      if (empty($_POST[$_])) {
-        throw new Exception("POST data is invalid or incomplete.");
+    $this->iparlLog("POSTed data: " . serialize($_POST));
+    try {
+
+      // Check secret.
+      foreach (['secret', 'name', 'lastname', 'email'] as $_) {
+        if (empty($_POST[$_])) {
+          $this->iparlLog("POSTed data missing (at least) $_");
+          throw new Exception("POST data is invalid or incomplete.");
+        }
       }
+      $key = civicrm_api3('Setting', 'getvalue', array( 'name' => "iparl_webhook_key" ));
+      if (empty($key)) {
+        $this->iparlLog("no iparl_webhook_key set. Will not process.");
+        throw new Exception("iParl secret not configured.");
+      }
+      if ($_POST['secret'] !== $key) {
+        $this->iparlLog("iparl_webhook_key mismatch. Will not process.");
+        throw new Exception("iParl invalid auth.");
+      }
+
+      $contact = $this->findOrCreate($_POST);
+      $this->mergePhone($_POST, $contact);
+      $this->mergeAddress($_POST, $contact);
+      $this->recordActivity($_POST, $contact);
+      $this->iparlLog("Successfuly created/updated contact $contact[id]");
+      echo "OK";
+      exit;
     }
-    $key = civicrm_api3('Setting', 'getvalue', array( 'name' => "iparl_webhook_key" ));
-    if (empty($key)) {
-      throw new Exception("iParl secret not configured.");
-    }
-    if ($_POST['secret'] !== $key) {
-      throw new Exception("iParl invalid auth.");
+    catch (Exception $e) {
+      error_log($e->getMessage());
+      header("$_SERVER[SERVER_PROTOCOL] 400 Bad request");
+      exit;
     }
 
-    $contact = $this->findOrCreate($_POST);
-
-    $this->mergePhone($input, $contact);
-
-    $this->mergeAddress($input, $contact);
-
-    $this->recordActivity($input, $contact);
-
-    echo "OK";
-    exit;
     //parent::run();
   }
 
@@ -84,11 +107,15 @@ class CRM_Iparl_Page_IparlWebhook extends CRM_Core_Page {
       ]);
 
     if ($result['count'] == 0) {
-      return $this->createContact($input);
+      $result =  $this->createContact($input);
+      $this->iparlLog("Created contact $result[id]");
+      return $result;
     }
     elseif ($result['count'] == 1) {
       // Single email found.
-      return $result['values'][0]['api.Contact.get']['values'][0];
+      $result =  $result['values'][0]['api.Contact.get']['values'][0];
+      $this->iparlLog("Found contact $result[id] by email match.");
+      return $result;
     }
     // Left with the case that the email is in there multiple times.
     // Could be the same contact each time. We'll go for the first contact whose
@@ -103,6 +130,7 @@ class CRM_Iparl_Page_IparlWebhook extends CRM_Core_Page {
       if ($input['name'] == $contact['first_name']
         && $input['lastname'] == $contact['last_name']) {
         // Found a match on name and email, return that.
+        $this->iparlLog("Found contact $contact[id] by email and name match.");
         return $contact;
       }
     }
@@ -111,6 +139,7 @@ class CRM_Iparl_Page_IparlWebhook extends CRM_Core_Page {
     foreach ($unique_contacts as $contact_id => $contact) {
       if ($input['lastname'] == $contact['last_name']) {
         // Found a match on last name and email, return that.
+        $this->iparlLog("Found contact $contact[id] by email and last name match.");
         return $contact;
       }
     }
@@ -119,14 +148,16 @@ class CRM_Iparl_Page_IparlWebhook extends CRM_Core_Page {
     foreach ($unique_contacts as $contact_id => $contact) {
       if ($input['firstname'] == $contact['first_name']) {
         // Found a match on last name and email, return that.
+        $this->iparlLog("Found contact $contact[id] by email and first name match.");
         return $contact;
       }
     }
 
     // We know the email, but we think it belongs to someone else.
     // Create new contact.
-    return $this->createContact($input);
-
+    $result = $this->createContact($input);
+    $this->iparlLog("Created contact $result[id]");
+    return $result;
   }
   /**
    * Create a contact.
@@ -135,6 +166,7 @@ class CRM_Iparl_Page_IparlWebhook extends CRM_Core_Page {
     $params = [
       'first_name' => $input['name'],
       'last_name' => $input['lastname'],
+      'contact_type' => 'Individual',
       'email' => $input['email'],
     ];
     $result = civicrm_api3('Contact', 'create', $params);
@@ -211,8 +243,8 @@ class CRM_Iparl_Page_IparlWebhook extends CRM_Core_Page {
       $xml = simplexml_load_file($url , null , LIBXML_NOCDATA);
       $file = json_decode(json_encode($xml));
       $subject = "Action $input[actionid]";
-      if ($file && !empty($file['action'])) {
-        foreach ($file['action'] as $action) {
+      if ($file && !empty($file->action)) {
+        foreach ($file->action as $action) {
           if ($action->id == $input['actionid']) {
             $subject = "Action $action->id: $action->title";
             break;
