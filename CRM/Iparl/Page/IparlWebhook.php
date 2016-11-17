@@ -1,31 +1,43 @@
 <?php
-
 /**
  *
- * Array
- * (
- *  [secret] => 2jh340f9
- *  [actiontype] => petition
- *  [name] => Wilma
- *  [lastname] => Flintstone
- *  [address1] =>
- *  [address2] =>
- *  [town] => Oxford
- *  [postcode] =>
- *  [country] =>
- *  [email] => forums@artfulrobot.uk
- *  [phone] =>
- *  [comment] =>
- *  [actionid] => 1
- *  [childid] =>
- *  [target] =>
- *  [personid] =>
- *  [mpname] =>
- *  [const] =>
- *  [council] =>
- *  [region] =>
- *  [contactme] => 0
- *  [optin2] => 0
+ * @file
+ * Webhook endpoint for iParl.
+ *
+ * Finds/creates contact, creates action. Success is indicated by simply responding "OK".
+ *
+ * @author Rich Lott / Artful Robot
+ * @copyright Rich Lott 2016
+ * see licence.
+ *
+ * At time of writing, the iParl API provides:
+ *
+ * from: https://iparlsetup.com/help/output-api.php
+ *
+ * - actionid	The ID number of the action. This displays in the URL of each action and can also be accessed as an XML file using the 'List actions API' referred to here.
+ * - secret	Secret string set when you set up this function. Testing for this in your script will allow you to filter out other, potentially hostile, attempts to feed information into your system. Not used in the redirect data string.
+ * - name	Where only one name field is gathered it will display here. If a last name is also gathered, this will be the first name.
+ * - lastname	Last name, if gathered
+ * - adderss1	Address line 1
+ * - address2	Address line 2
+ * - town	Town
+ * - postcode	Postcode
+ * - country	Country
+ * - email	Email address
+ * - phone	Phone number
+ * - childid	The Child ID number of the sub-action if set. Some actions allow a supporter to select a pathway which will present them with one or another model letter.
+ * - target	The email address used in actions which email a single target
+ * - personid	The TheyWorkForYou.com personid value for the supporter's MP, if identified in the action. This can be used as the id value in the TheyWorkForYou getMP API method.
+ * - mpname	Name of supporter's MP
+ * - const	Westminster constituency
+ * - council	Borough Council
+ * - region	European Parliamentary region
+ * - contactme	Set as 1 if the first optional tick box has been checked
+ * - optin2	Set as 1 if the second optional tick box has been checked
+ *
+ * And there's also https://iparlsetup.com/help/api.php
+ * http://www.iparl.com/api/equalitytrust/petitions
+ * http://www.iparl.com/api/equalitytrust/actions
  */
 
 class CRM_Iparl_Page_IparlWebhook extends CRM_Core_Page {
@@ -42,24 +54,20 @@ class CRM_Iparl_Page_IparlWebhook extends CRM_Core_Page {
         throw new Exception("POST data is invalid or incomplete.");
       }
     }
-    $result = civicrm_api3('Setting', 'get', ['sequential' => 1, 'return' => "iparl_webhook_key"]);
-    if (empty($result['values'][0]['iparl_webhook_key'])) {
+    $key = civicrm_api3('Setting', 'getvalue', array( 'name' => "iparl_webhook_key" ));
+    if (empty($key)) {
       throw new Exception("iParl secret not configured.");
     }
-    if ($_POST['secret'] !== $result['values'][0]['iparl_webhook_key']) {
+    if ($_POST['secret'] !== $key) {
       throw new Exception("iParl invalid auth.");
     }
 
-    // @todo check we have name, email, lookup or find.
     $contact = $this->findOrCreate($_POST);
 
-    // @todo merge in phone
+    $this->mergePhone($input, $contact);
 
-    // @todo merge in address
+    $this->mergeAddress($input, $contact);
 
-    // @todo Look up action using iParl API
-
-    // @todo Create activity.
     $this->recordActivity($input, $contact);
 
     echo "OK";
@@ -124,12 +132,112 @@ class CRM_Iparl_Page_IparlWebhook extends CRM_Core_Page {
    * Create a contact.
    */
   public function createContact($input) {
-    // @todo
+    $params = [
+      'first_name' => $input['name'],
+      'last_name' => $input['lastname'],
+      'email' => $input['email'],
+    ];
+    $result = civicrm_api3('Contact', 'create', $params);
+    return $result;
+  }
+  /**
+   * Ensure we have their phone number.
+   */
+  public function mergePhone($input, $contact) {
+    if (empty($input['phone'])) {
+      return;
+    }
+    $phone_numeric = preg_replace('/[^0-9]+/', '', $input['phone']);
+    if (!$phone_numeric) {
+      return;
+    }
+    // Does this phone exist already?
+    $result = civicrm_api3('Phone', 'get', [
+      'contact_id' => $contact['id'],
+      'phone_numeric' => $phone_numeric,
+    ]);
+    if ($result['count'] == 0) {
+      // Create the phone.
+      $result = civicrm_api3('Phone', 'create', [
+        'contact_id' => $contact['id'],
+        'phone' => $input['phone'],
+      ]);
+    }
+  }
+  /**
+   * Ensure we have their address.
+   */
+  public function mergeAddress($input, $contact) {
+    if (empty($input['address1']) || empty($input['town']) || empty($input['postcode'])) {
+      // Not enough input.
+      return;
+    }
+    // Mangle address1 and address2 into one field since we don't know how
+    // supplimental addresses are configured; they're not always the 2nd line.
+    $street_address = trim($input['address1']);
+    if (!empty($input['address2'])) {
+      $street_address .= ", " . trim($input['address2']);
+    }
+    // Does this address exist already?
+    $result = civicrm_api3('Address', 'get', [
+      'contact_id' => $contact['id'],
+      'street_address' => $input['address1'],
+      'city' => $input['town'],
+      'postal_code' => $input['postcode'],
+    ]);
+    if ($result['count'] == 0) {
+      // Create the address.
+      $result = civicrm_api3('Address', 'create', [
+        'location_type_id' => "Home",
+        'contact_id' => $contact['id'],
+        'street_address' => $input['address1'],
+        'city' => $input['town'],
+        'postal_code' => $input['postcode'],
+      ]);
+    }
   }
   /**
    * Record the activity.
    */
   public function recordActivity($input, $contact) {
+
+    $iparl_username = civicrm_api3('Setting', 'getvalue', array( 'name' => "iparl_user_name", 'group' => 'iParl Integration Settings' ));
+
+    $subject = 'Unknown action or petition';
+
+    if (!empty($input['actionid']) && $iparl_username) {
+      // We have an 'action'.
+      $url = "http://www.iparl.com/api/$iparl_username/actions";
+      $xml = simplexml_load_file($url , null , LIBXML_NOCDATA);
+      $file = json_decode(json_encode($xml));
+      $subject = "Action $input[actionid]";
+      if ($file && !empty($file['action'])) {
+        foreach ($file['action'] as $action) {
+          if ($action->id == $input['actionid']) {
+            $subject = "Action $action->id: $action->title";
+            break;
+          }
+        }
+      }
+    }
+    if (FALSE) {
+      // @todo future feature: it is unclear how to look up the petition.
+      if (!empty($input['petitionid']) && $iparl_username) {
+        // We have an 'action'.
+        $url = "http://www.iparl.com/api/$iparl_username/petitions";
+        $xml = simplexml_load_file($url , null , LIBXML_NOCDATA);
+        $file = json_decode(json_encode($xml));
+        $subject = "Petition $input[petitionid]";
+        if ($file && !empty($file['petition'])) {
+          foreach ($file['petition'] as $petition) {
+            if ($petition->id == $input['petitionid']) {
+              $subject = "Petition $petition->id: $petition->title";
+              break;
+            }
+          }
+        }
+      }
+    }
 
     $activity_target_type = (int) civicrm_api3('OptionValue', 'getvalue',
       ['return' => "value", 'option_group_id' => "activity_contacts", 'name' => "Activity Targets"]);
@@ -138,11 +246,11 @@ class CRM_Iparl_Page_IparlWebhook extends CRM_Core_Page {
       ['return' => "value", 'option_group_id' => "activity_type", 'name' => "iparl"]);
 
     $result = civicrm_api3('Activity', 'create', [
-      'activity_type_id' => $activity_type_declaration,
-      'target_id' => $contact['id'],
+      'activity_type_id'  => $activity_type_declaration,
+      'target_id'         => $contact['id'],
       'source_contact_id' => $contact['id'],
-      'subject' => 'Took action',
-      'details' => '',
+      'subject'           => $subject,
+      'details'           => '',
     ]);
     return $result;
   }

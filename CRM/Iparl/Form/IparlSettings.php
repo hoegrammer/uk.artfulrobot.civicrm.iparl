@@ -16,6 +16,17 @@ class CRM_Iparl_Form_IparlSettings extends CRM_Core_Form {
   private $_submittedValues = array();
   private $_settings = array();
   public function buildQuickForm() {
+
+    // Get username
+    $iparl_username = civicrm_api3('Setting', 'getvalue', array( 'name' => "iparl_user_name", 'group' => 'iParl Integration Settings' ));
+    $iparl_webhook_key = civicrm_api3('Setting', 'getvalue', array( 'name' => "iparl_webhook_key", 'group' => 'iParl Integration Settings' ));
+    $webhook_url = CRM_Utils_System::url('civicrm/iparl', $q=null, $absolute=TRUE);
+    $this->assign('webhookUrl', $webhook_url);
+
+    if (!preg_match('/^[a-zA-Z0-9_-]+$/', $iparl_username)) {
+      $this->assign('usernameUnset', TRUE);
+    }
+
     $settings = $this->getFormSettings();
     foreach ($settings as $name => $setting) {
       if (isset($setting['quick_form_type'])) {
