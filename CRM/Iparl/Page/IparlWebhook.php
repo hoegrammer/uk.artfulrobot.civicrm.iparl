@@ -65,7 +65,7 @@ class CRM_Iparl_Page_IparlWebhook extends CRM_Core_Page {
     try {
 
       // Check secret.
-      foreach (['secret', 'name', 'lastname', 'email'] as $_) {
+      foreach (array('secret', 'name', 'lastname', 'email') as $_) {
         if (empty($_POST[$_])) {
           $this->iparlLog("POSTed data missing (at least) $_");
           throw new Exception("POST data is invalid or incomplete.");
@@ -100,11 +100,11 @@ class CRM_Iparl_Page_IparlWebhook extends CRM_Core_Page {
 
   public function findOrCreate($input) {
     // Look up the email first.
-    $result = civicrm_api3('Email', 'get', [
+    $result = civicrm_api3('Email', 'get', array(
       'sequential' => 1,
       'email' => $input['email'],
-      'api.Contact.get' => [],
-      ]);
+      'api.Contact.get' => array(),
+    ));
 
     if ($result['count'] == 0) {
       $result =  $this->createContact($input);
@@ -120,7 +120,7 @@ class CRM_Iparl_Page_IparlWebhook extends CRM_Core_Page {
     // Left with the case that the email is in there multiple times.
     // Could be the same contact each time. We'll go for the first contact whose
     // name matches.
-    $unique_contacts = [];
+    $unique_contacts = array();
     foreach ($result['values'] as $email_record) {
       foreach ($email_record['api.Contact.get'] as $c) {
         $unique_contacts[$c['contact_id']] = $c;
@@ -163,12 +163,12 @@ class CRM_Iparl_Page_IparlWebhook extends CRM_Core_Page {
    * Create a contact.
    */
   public function createContact($input) {
-    $params = [
+    $params = array(
       'first_name' => $input['name'],
       'last_name' => $input['lastname'],
       'contact_type' => 'Individual',
       'email' => $input['email'],
-    ];
+    );
     $result = civicrm_api3('Contact', 'create', $params);
     return $result;
   }
@@ -184,16 +184,16 @@ class CRM_Iparl_Page_IparlWebhook extends CRM_Core_Page {
       return;
     }
     // Does this phone exist already?
-    $result = civicrm_api3('Phone', 'get', [
+    $result = civicrm_api3('Phone', 'get', array(
       'contact_id' => $contact['id'],
       'phone_numeric' => $phone_numeric,
-    ]);
+    ));
     if ($result['count'] == 0) {
       // Create the phone.
-      $result = civicrm_api3('Phone', 'create', [
+      $result = civicrm_api3('Phone', 'create', array(
         'contact_id' => $contact['id'],
         'phone' => $input['phone'],
-      ]);
+      ));
     }
   }
   /**
@@ -211,21 +211,21 @@ class CRM_Iparl_Page_IparlWebhook extends CRM_Core_Page {
       $street_address .= ", " . trim($input['address2']);
     }
     // Does this address exist already?
-    $result = civicrm_api3('Address', 'get', [
+    $result = civicrm_api3('Address', 'get', array(
       'contact_id' => $contact['id'],
       'street_address' => $input['address1'],
       'city' => $input['town'],
       'postal_code' => $input['postcode'],
-    ]);
+    ));
     if ($result['count'] == 0) {
       // Create the address.
-      $result = civicrm_api3('Address', 'create', [
+      $result = civicrm_api3('Address', 'create', array(
         'location_type_id' => "Home",
         'contact_id' => $contact['id'],
         'street_address' => $input['address1'],
         'city' => $input['town'],
         'postal_code' => $input['postcode'],
-      ]);
+      ));
     }
   }
   /**
@@ -272,18 +272,17 @@ class CRM_Iparl_Page_IparlWebhook extends CRM_Core_Page {
     }
 
     $activity_target_type = (int) civicrm_api3('OptionValue', 'getvalue',
-      ['return' => "value", 'option_group_id' => "activity_contacts", 'name' => "Activity Targets"]);
+      array( 'return' => "value", 'option_group_id' => "activity_contacts", 'name' => "Activity Targets" ));
 
     $activity_type_declaration= (int) civicrm_api3('OptionValue', 'getvalue',
-      ['return' => "value", 'option_group_id' => "activity_type", 'name' => "iparl"]);
+      array( 'return' => "value", 'option_group_id' => "activity_type", 'name' => "iparl" ));
 
-    $result = civicrm_api3('Activity', 'create', [
-      'activity_type_id'  => $activity_type_declaration,
+    $result = civicrm_api3('Activity', 'create', array( 'activity_type_id'  => $activity_type_declaration,
       'target_id'         => $contact['id'],
       'source_contact_id' => $contact['id'],
       'subject'           => $subject,
       'details'           => '',
-    ]);
+    ));
     return $result;
   }
 }

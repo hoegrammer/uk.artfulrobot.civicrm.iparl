@@ -39,7 +39,7 @@ function iparl_civicrm_install() {
    *              is needed.
    */
   $api_get_or_create = function ($entity, $params_min, $params_extra) {
-    $params_min += ['sequential' => 1];
+    $params_min += array('sequential' => 1);
     $result = civicrm_api3($entity, 'get', $params_min);
     if (!$result['count']) {
       // Couldn't find it, create it now.
@@ -49,11 +49,11 @@ function iparl_civicrm_install() {
   };
 
   // We need an iParl activity type
-  $activity_type = $api_get_or_create('OptionValue', [
+  $activity_type = $api_get_or_create('OptionValue', array(
     'option_group_id' => "activity_type",
     'name' => "iparl",
-  ],
-  [ 'label' => 'iParl action']);
+  ),
+  array( 'label' => 'iParl action' ));
 
   $url = CRM_Utils_System::url('civicrm/admin/iparl');
   CRM_Core_Session::setStatus(ts("You must now <a href='$url'>configure the iParl extension</a>."));
