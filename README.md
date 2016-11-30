@@ -17,12 +17,14 @@ Install the extension in the normal way. A pop-up will tell you to go to
 `civicrm/admin/iparl` to configure things. That page has the instructions.
 
 You can test it like
-    curl -k -L 'https://your-webhook-url' \
-        -d secret=helloHorseHeadLikeYourJumper \
-        -d name=Jo \
-        -d lastname=Bloggs \
-        -d email=jo@exampled.com \
-        -d actionid=1
+```sh
+curl -k -L 'https://your-webhook-url' \
+     -d secret=helloHorseHeadLikeYourJumper \
+     -d name=Jo \
+     -d lastname=Bloggs \
+     -d email=jo@exampled.com \
+     -d actionid=1
+```
 
 Where your-webhook-url you can get from the settings page (it's basically your
 domain `/civicrm/iparl-webhook`) and your secret must match.
