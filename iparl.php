@@ -169,15 +169,15 @@ function iparl_civicrm_preProcess($formName, &$form) {
  * Implements hook_civicrm_navigationMenu().
  *
  * @link http://wiki.civicrm.org/confluence/display/CRMDOC/hook_civicrm_navigationMenu
- *
+ */
 function iparl_civicrm_navigationMenu(&$menu) {
-  _iparl_civix_insert_navigation_menu($menu, NULL, array(
-    'label' => ts('The Page', array('domain' => 'uk.artfulrobot.iparl')),
-    'name' => 'the_page',
-    'url' => 'civicrm/the-page',
-    'permission' => 'access CiviReport,access CiviContribute',
+  _iparl_civix_insert_navigation_menu($menu, 'Administer', array(
+    'label' => ts('iParl Settings', array('domain' => 'uk.artfulrobot.civicrm.importhelper')),
+    'name' => 'iparlsettings',
+    'url' => 'civicrm/admin/iparl',
+    'permission' => 'administer CiviCRM',
     'operator' => 'OR',
     'separator' => 0,
   ));
   _iparl_civix_navigationMenu($menu);
-} // */
+}

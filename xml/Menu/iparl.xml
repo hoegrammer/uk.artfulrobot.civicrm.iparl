@@ -4,7 +4,7 @@
     <path>civicrm/admin/iparl</path>
     <page_callback>CRM_Iparl_Form_IparlSettings</page_callback>
     <title>IparlSettings</title>
-    <access_arguments>access CiviCRM</access_arguments>
+    <access_arguments>administer CiviCRM</access_arguments>
   </item>
   <item>
     <path>civicrm/iparl-webhook</path>

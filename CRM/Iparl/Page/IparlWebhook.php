@@ -14,32 +14,34 @@
  *
  * from: https://iparlsetup.com/help/output-api.php
  *
- * - actionid	The ID number of the action. This displays in the URL of each action and can also be accessed as an XML file using the 'List actions API' referred to here.
- * - secret	Secret string set when you set up this function. Testing for this in your script will allow you to filter out other, potentially hostile, attempts to feed information into your system. Not used in the redirect data string.
- * - name	Where only one name field is gathered it will display here. If a last name is also gathered, this will be the first name.
- * - lastname	Last name, if gathered
- * - adderss1	Address line 1
- * - address2	Address line 2
- * - town	Town
- * - postcode	Postcode
- * - country	Country
- * - email	Email address
- * - phone	Phone number
- * - childid	The Child ID number of the sub-action if set. Some actions allow a supporter to select a pathway which will present them with one or another model letter.
- * - target	The email address used in actions which email a single target
- * - personid	The TheyWorkForYou.com personid value for the supporter's MP, if identified in the action. This can be used as the id value in the TheyWorkForYou getMP API method.
- * - mpname	Name of supporter's MP
- * - const	Westminster constituency
- * - council	Borough Council
- * - region	European Parliamentary region
- * - contactme	Set as 1 if the first optional tick box has been checked
- * - optin2	Set as 1 if the second optional tick box has been checked
+ * - actionid     The ID number of the action. This displays in the URL of each action and can also be accessed as an XML file using the 'List actions API' referred to here.
+ * - secret       Secret string set when you set up this function. Testing for this in your script will allow you to filter out other, potentially hostile, attempts to feed information into your system. Not used in the redirect data string.
+ * - name         Where only one name field is gathered it will display here. If a last name is also gathered, this will be the first name.
+ * - lastname     Last name, if gathered
+ * - adderss1     Address line 1
+ * - address2     Address line 2
+ * - town         Town
+ * - postcode     Postcode
+ * - country      Country
+ * - email        Email address
+ * - phone        Phone number
+ * - childid      The Child ID number of the sub-action if set. Some actions allow a supporter to select a pathway which will present them with one or another model letter.
+ * - target       The email address used in actions which email a single target
+ * - personid     The TheyWorkForYou.com personid value for the supporter's MP, if identified in the action. This can be used as the id value in the TheyWorkForYou getMP API method.
+ * - mpname
+ * - const        ??
+ * - council
+ * - region
+ * - optin1
+ * - optin2
  *
- * And there's also https://iparlsetup.com/help/api.php
- * http://www.iparl.com/api/equalitytrust/petitions
- * http://www.iparl.com/api/equalitytrust/actions
+ * For petitions we *also* get:
+ *
+ * - actiontype: 'petition'
+ * - actionid   Refers to the petition's ID.
+ * - comment
+ *
  */
-
 class CRM_Iparl_Page_IparlWebhook extends CRM_Core_Page {
 
   public $iparl_logging;
@@ -49,6 +51,7 @@ class CRM_Iparl_Page_IparlWebhook extends CRM_Core_Page {
   public function iparlLog($message, $priority=PEAR_LOG_INFO) {
 
     if (!isset($this->iparl_logging)) {
+      // Look up logging setting and cache it.
       $this->iparl_logging = (int) civicrm_api3('Setting', 'getvalue', array( 'name' => "iparl_logging", 'group' => 'iParl Integration Settings' ));
     }
     if (!$this->iparl_logging) {
@@ -122,7 +125,7 @@ class CRM_Iparl_Page_IparlWebhook extends CRM_Core_Page {
     // name matches.
     $unique_contacts = array();
     foreach ($result['values'] as $email_record) {
-      foreach ($email_record['api.Contact.get'] as $c) {
+      foreach ($email_record['api.Contact.get']['values'] as $c) {
         $unique_contacts[$c['contact_id']] = $c;
       }
     }
@@ -237,33 +240,36 @@ class CRM_Iparl_Page_IparlWebhook extends CRM_Core_Page {
 
     $subject = 'Unknown action or petition';
 
+    // 'actiontype' key is not present for Lobby Actions, but is present and set to petition for petitions.
+    $is_petition = (!empty($input['actiontype']) && $input['actiontype'] == 'petition');
+
     if (!empty($input['actionid']) && $iparl_username) {
-      // We have an 'action'.
-      $url = "http://www.iparl.com/api/$iparl_username/actions";
+
+      // Look up the petition or action.
+      $url = "http://www.iparl.com/api/$iparl_username/"
+        . ($is_petition ? "petitions" : "actions");
       $xml = simplexml_load_file($url , null , LIBXML_NOCDATA);
       $file = json_decode(json_encode($xml));
-      $subject = "Action $input[actionid]";
-      if ($file && !empty($file->action)) {
-        foreach ($file->action as $action) {
-          if ($action->id == $input['actionid']) {
-            $subject = "Action $action->id: $action->title";
-            break;
+
+      // Improve the subject line a bit even if we can't parse the XML...
+      $subject = ($is_petition ? 'Petition' : 'Action') . " $input[actionid]";
+
+      if ($file) {
+
+        // Petitions.
+        if ($is_petition && !empty($file->petition)) {
+          foreach ($file->petition as $petition) {
+            if ($petition->id == $input['actionid']) {
+              $subject = "Petition $petition->id: $petition->title";
+              break;
+            }
           }
         }
-      }
-    }
-    if (FALSE) {
-      // @todo future feature: it is unclear how to look up the petition.
-      if (!empty($input['petitionid']) && $iparl_username) {
-        // We have an 'action'.
-        $url = "http://www.iparl.com/api/$iparl_username/petitions";
-        $xml = simplexml_load_file($url , null , LIBXML_NOCDATA);
-        $file = json_decode(json_encode($xml));
-        $subject = "Petition $input[petitionid]";
-        if ($file && !empty($file['petition'])) {
-          foreach ($file['petition'] as $petition) {
-            if ($petition->id == $input['petitionid']) {
-              $subject = "Petition $petition->id: $petition->title";
+        // Actions.
+        elseif (!$is_petition && !empty($file->action)) {
+          foreach ($file->action as $action) {
+            if ($action->id == $input['actionid']) {
+              $subject = "Action $action->id: $action->title";
               break;
             }
           }
@@ -277,12 +283,14 @@ class CRM_Iparl_Page_IparlWebhook extends CRM_Core_Page {
     $activity_type_declaration= (int) civicrm_api3('OptionValue', 'getvalue',
       array( 'return' => "value", 'option_group_id' => "activity_type", 'name' => "iparl" ));
 
-    $result = civicrm_api3('Activity', 'create', array( 'activity_type_id'  => $activity_type_declaration,
+    $params = array(
+      'activity_type_id'  => $activity_type_declaration,
       'target_id'         => $contact['id'],
       'source_contact_id' => $contact['id'],
       'subject'           => $subject,
       'details'           => '',
-    ));
+    );
+    $result = civicrm_api3('Activity', 'create', $params);
     return $result;
   }
 }
