@@ -15,6 +15,7 @@ You'll need a functioning iParl account before starting.
 
 Install the extension in the normal way. A pop-up will tell you to go to
 `civicrm/admin/iparl` to configure things. That page has the instructions.
+**You can also find this link under the Administer » iParl Settings**
 
 You can test it like
 ```sh
@@ -43,3 +44,8 @@ stitches together open source tech for people who want to change the world. It
 was funded by the Equality Trust.
 
 Futher pull requests welcome :-) Nb. it has to work on 4.6
+
+## Changelog
+
+Version 1.1: adds support for iParl "Petition" actions (v1 just worked with
+"Lobby Actions").
