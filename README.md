@@ -23,7 +23,7 @@ curl -k -L 'https://your-webhook-url' \
      -d secret=helloHorseHeadLikeYourJumper \
      -d name=Jo \
      -d lastname=Bloggs \
-     -d email=jo@exampled.com \
+     -d email=jo@example.com \
      -d actionid=1
 ```
 
@@ -43,9 +43,11 @@ This was written by Rich Lott ([Artful Robot](https://artfulrobot.uk)) who
 stitches together open source tech for people who want to change the world. It
 was funded by the Equality Trust.
 
-Futher pull requests welcome :-) Nb. it has to work on 4.6
+Futher pull requests welcome :-)
 
 ## Changelog
 
 Version 1.1: adds support for iParl "Petition" actions (v1 just worked with
 "Lobby Actions").
+
+Version 1.2: works on CiviCRM 5.9

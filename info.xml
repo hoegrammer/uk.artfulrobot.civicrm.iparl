@@ -14,13 +14,15 @@
     <url desc="Support">https://artfulrobot.uk</url>
     <url desc="Licensing">http://www.gnu.org/licenses/agpl-3.0.html</url>
   </urls>
-  <releaseDate>2017-03-03</releaseDate>
+  <releaseDate>2019-01-30</releaseDate>
   <version>1.1</version>
   <develStage>beta</develStage>
   <compatibility>
     <ver>4.4.6</ver>
+    <ver>5.0</ver>
+    <ver>5.9</ver>
   </compatibility>
-  <comments>This was written with funding from the Equality Trust. It is written against 4.6.4.</comments>
+  <comments>This was written with funding from the Equality Trust.</comments>
   <civix>
     <namespace>CRM/Iparl</namespace>
   </civix>

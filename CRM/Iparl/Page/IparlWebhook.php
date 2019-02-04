@@ -18,7 +18,7 @@
  * - secret       Secret string set when you set up this function. Testing for this in your script will allow you to filter out other, potentially hostile, attempts to feed information into your system. Not used in the redirect data string.
  * - name         Where only one name field is gathered it will display here. If a last name is also gathered, this will be the first name.
  * - lastname     Last name, if gathered
- * - adderss1     Address line 1
+ * - address1     Address line 1
  * - address2     Address line 2
  * - town         Town
  * - postcode     Postcode
@@ -44,6 +44,11 @@
  */
 class CRM_Iparl_Page_IparlWebhook extends CRM_Core_Page {
 
+  /** @var array */
+  public $test_log = [];
+
+  /** @var mixed FALSE or (for test purposes) a callback to use in place of simplexml_load_file */
+  public $simplexml_load_file = 'simplexml_load_file';
   public $iparl_logging;
   /**
    * Log, if logging is enabled.
@@ -59,37 +64,19 @@ class CRM_Iparl_Page_IparlWebhook extends CRM_Core_Page {
       return;
     }
 
+    if ($this->iparl_logging === 'phpunit') {
+      // For test purposes, just append to an array.
+      $this->test_log[] = $message;
+      return;
+    }
+
     $message = "From $_SERVER[REMOTE_ADDR]: $message";
     CRM_Core_Error::debug_log_message($message, $out=FALSE, $component='iparl', $priority);
   }
   public function run() {
-
     $this->iparlLog("POSTed data: " . serialize($_POST));
     try {
-
-      // Check secret.
-      foreach (array('secret', 'name', 'lastname', 'email') as $_) {
-        if (empty($_POST[$_])) {
-          $this->iparlLog("POSTed data missing (at least) $_");
-          throw new Exception("POST data is invalid or incomplete.");
-        }
-      }
-      $key = civicrm_api3('Setting', 'getvalue', array( 'name' => "iparl_webhook_key" ));
-      if (empty($key)) {
-        $this->iparlLog("no iparl_webhook_key set. Will not process.");
-        throw new Exception("iParl secret not configured.");
-      }
-      if ($_POST['secret'] !== $key) {
-        $this->iparlLog("iparl_webhook_key mismatch. Will not process.");
-        throw new Exception("iParl invalid auth.");
-      }
-
-      $contact = $this->findOrCreate($_POST);
-      $this->mergePhone($_POST, $contact);
-      $this->mergeAddress($_POST, $contact);
-      $this->recordActivity($_POST, $contact);
-      $this->iparlLog("Successfuly created/updated contact $contact[id]");
-      echo "OK";
+      $this->processWebhook($_POST);
       exit;
     }
     catch (Exception $e) {
@@ -97,8 +84,40 @@ class CRM_Iparl_Page_IparlWebhook extends CRM_Core_Page {
       header("$_SERVER[SERVER_PROTOCOL] 400 Bad request");
       exit;
     }
+  }
 
-    //parent::run();
+  /**
+   * The main procesing method.
+   *
+   * It is separate for testing purposes.
+   *
+   * @param array ($_POST data)
+   * @return bool TRUE on success
+   */
+  public function processWebhook($data) {
+    // Check secret.
+    foreach (array('secret', 'name', 'lastname', 'email') as $_) {
+      if (empty($data[$_])) {
+        $this->iparlLog("POSTed data missing (at least) $_");
+        throw new Exception("POST data is invalid or incomplete.");
+      }
+    }
+    $key = civicrm_api3('Setting', 'getvalue', array( 'name' => "iparl_webhook_key" ));
+    if (empty($key)) {
+      $this->iparlLog("no iparl_webhook_key set. Will not process.");
+      throw new Exception("iParl secret not configured.");
+    }
+    if ($data['secret'] !== $key) {
+      $this->iparlLog("iparl_webhook_key mismatch. Will not process.");
+      throw new Exception("iParl invalid auth.");
+    }
+
+    $contact = $this->findOrCreate($data);
+    $this->mergePhone($data, $contact);
+    $this->mergeAddress($data, $contact);
+    $this->recordActivity($data, $contact);
+    $this->iparlLog("Successfully created/updated contact $contact[id]");
+    return TRUE;
   }
 
   public function findOrCreate($input) {
@@ -193,10 +212,14 @@ class CRM_Iparl_Page_IparlWebhook extends CRM_Core_Page {
     ));
     if ($result['count'] == 0) {
       // Create the phone.
+      $this->iparlLog("Created phone");
       $result = civicrm_api3('Phone', 'create', array(
         'contact_id' => $contact['id'],
         'phone' => $input['phone'],
       ));
+    }
+    else {
+      $this->iparlLog("Phone already present");
     }
   }
   /**
@@ -229,6 +252,10 @@ class CRM_Iparl_Page_IparlWebhook extends CRM_Core_Page {
         'city' => $input['town'],
         'postal_code' => $input['postcode'],
       ));
+      $this->iparlLog("Created address");
+    }
+    else {
+      $this->iparlLog("Address already existed.");
     }
   }
   /**
@@ -236,44 +263,14 @@ class CRM_Iparl_Page_IparlWebhook extends CRM_Core_Page {
    */
   public function recordActivity($input, $contact) {
 
-    $iparl_username = civicrm_api3('Setting', 'getvalue', array( 'name' => "iparl_user_name", 'group' => 'iParl Integration Settings' ));
-
-    $subject = 'Unknown action or petition';
-
     // 'actiontype' key is not present for Lobby Actions, but is present and set to petition for petitions.
-    $is_petition = (!empty($input['actiontype']) && $input['actiontype'] == 'petition');
+    $is_petition = (!empty($input['actiontype']) && $input['actiontype'] === 'petition');
 
-    if (!empty($input['actionid']) && $iparl_username) {
-
-      // Look up the petition or action.
-      $url = "http://www.iparl.com/api/$iparl_username/"
-        . ($is_petition ? "petitions" : "actions");
-      $xml = simplexml_load_file($url , null , LIBXML_NOCDATA);
-      $file = json_decode(json_encode($xml));
-
-      // Improve the subject line a bit even if we can't parse the XML...
-      $subject = ($is_petition ? 'Petition' : 'Action') . " $input[actionid]";
-
-      if ($file) {
-
-        // Petitions.
-        if ($is_petition && !empty($file->petition)) {
-          foreach ($file->petition as $petition) {
-            if ($petition->id == $input['actionid']) {
-              $subject = "Petition $petition->id: $petition->title";
-              break;
-            }
-          }
-        }
-        // Actions.
-        elseif (!$is_petition && !empty($file->action)) {
-          foreach ($file->action as $action) {
-            if ($action->id == $input['actionid']) {
-              $subject = "Action $action->id: $action->title";
-              break;
-            }
-          }
-        }
+    $subject = ($is_petition ? 'Petition' : 'Action') . " $input[actionid]";
+    if (!empty($input['actionid'])) {
+      $lookup = $this->getIparlObject($is_petition ? 'petition' : 'action');
+      if (isset($lookup[$input['actionid']])) {
+        $subject .= ": " . $lookup[$input['actionid']];
       }
     }
 
@@ -293,4 +290,36 @@ class CRM_Iparl_Page_IparlWebhook extends CRM_Core_Page {
     $result = civicrm_api3('Activity', 'create', $params);
     return $result;
   }
+  /**
+   * Obtain a cached array lookup keyed by action/petition id with title as value.
+   *
+   * @param string $type petition|action
+   */
+  public function getIparlObject($type) {
+    if ($type !== 'action' && $type !== 'petition') {
+      throw new Exception("getIparlObject \$type must be action or petition");
+    }
+
+    // do we have it in cache?
+    $cache = Civi::cache();
+    $data = $cache->get($type, []);
+    if (!$data) {
+      // Fetch from iparl api.
+      $iparl_username = civicrm_api3('Setting', 'getvalue', array( 'name' => "iparl_user_name", 'group' => 'iParl Integration Settings' ));
+      if ($iparl_username) {
+        $url = "https://iparlsetup.com/api/$iparl_username/{$type}s";
+        $function = $this->simplexml_load_file;
+        $xml = $function($url , null , LIBXML_NOCDATA);
+        $file = json_decode(json_encode($xml));
+        if ($file && $file->$type) {
+          foreach (is_array($file->$type) ? $file->$type : [$file->type] as $item) {
+            $data[$item->id] = $item->title;
+          }
+          $cache->set($type, $data);
+        }
+      }
+    }
+    return $data;
+  }
+
 }
