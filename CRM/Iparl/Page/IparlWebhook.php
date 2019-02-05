@@ -304,10 +304,16 @@ class CRM_Iparl_Page_IparlWebhook extends CRM_Core_Page {
     }
 
     // do we have it in cache?
-    $cache = Civi::cache();
+    // Note that this: $cache = Civi::cache(); defaults to a normal array, lost at the end of each request.
+    $cache = CRM_Utils_Cache::create([
+      'type' => ['SqlGroup', 'ArrayCache'],
+      'name' => 'iparl',
+    ]);
+
     $cache_key = "iparl_titles_$type";
     $data = $bypass_cache ? NULL : $cache->get($cache_key, NULL);
     if ($data === NULL) {
+      $this->iparlLog("Cache miss on looking up $cache_key");
       // Fetch from iparl api.
       $iparl_username = Civi::settings()->get("iparl_user_name");
       if ($iparl_username) {
@@ -325,8 +331,15 @@ class CRM_Iparl_Page_IparlWebhook extends CRM_Core_Page {
           }
           // Cache it (even an empty dataset) for 10 minutes.
           $cache->set($cache_key, $data, 10*60);
+          $this->iparlLog("Caching " . count($data) . " results from $url for 10 minutes.");
+        }
+        else {
+          $this->iparlLog("Failed to load resource at: $url");
         }
       }
+    }
+    else {
+      $this->iparlLog("Cache hit on looking up $cache_key");
     }
     return $data;
   }

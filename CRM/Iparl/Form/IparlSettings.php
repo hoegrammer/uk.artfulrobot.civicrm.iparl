@@ -79,7 +79,10 @@ class CRM_Iparl_Form_IparlSettings extends CRM_Core_Form {
     $this->saveSettings();
     parent::postProcess();
     // Clear cache.
-    $cache = Civi::cache();
+    $cache = CRM_Utils_Cache::create([
+      'type' => ['SqlGroup', 'ArrayCache'],
+      'name' => 'iparl',
+    ]);
     foreach (['action', 'petition'] as $type) {
       $cache_key = "iparl_titles_$type";
       $cache->delete($cache_key);

@@ -83,6 +83,14 @@ function iparl_civicrm_enable() {
  * @link http://wiki.civicrm.org/confluence/display/CRMDOC/hook_civicrm_disable
  */
 function iparl_civicrm_disable() {
+  $cache = CRM_Utils_Cache::create([
+    'type' => ['SqlGroup', 'ArrayCache'],
+    'name' => 'iparl',
+  ]);
+  foreach (['action', 'petition'] as $type) {
+    $cache_key = "iparl_titles_$type";
+    $cache->delete($cache_key);
+  }
   _iparl_civix_civicrm_disable();
 }
 
