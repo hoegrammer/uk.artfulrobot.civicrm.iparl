@@ -48,7 +48,7 @@ class CRM_Iparl_Page_IparlWebhook extends CRM_Core_Page {
   public $test_log = [];
 
   /** @var mixed FALSE or (for test purposes) a callback to use in place of simplexml_load_file */
-  public $simplexml_load_file = 'simplexml_load_file';
+  public static $simplexml_load_file = 'simplexml_load_file';
   public $iparl_logging;
   /**
    * Log, if logging is enabled.
@@ -294,32 +294,51 @@ class CRM_Iparl_Page_IparlWebhook extends CRM_Core_Page {
    * Obtain a cached array lookup keyed by action/petition id with title as value.
    *
    * @param string $type petition|action
+   * @return null|array NULL means unsuccessful at downloading otherwise return
+   * array (which may be empty)
    */
-  public function getIparlObject($type) {
+  public function getIparlObject($type, $bypass_cache=FALSE) {
     if ($type !== 'action' && $type !== 'petition') {
-      throw new Exception("getIparlObject \$type must be action or petition");
+      throw new Exception("getIparlObject \$type must be action or petition. Received " . json_encode($type));
     }
 
     // do we have it in cache?
     $cache = Civi::cache();
-    $data = $cache->get($type, []);
-    if (!$data) {
+    $cache_key = "iparl_titles_$type";
+    $data = $bypass_cache ? NULL : $cache->get($cache_key, NULL);
+    if ($data === NULL) {
       // Fetch from iparl api.
-      $iparl_username = civicrm_api3('Setting', 'getvalue', array( 'name' => "iparl_user_name", 'group' => 'iParl Integration Settings' ));
+      $iparl_username = Civi::settings()->get("iparl_user_name");
       if ($iparl_username) {
-        $url = "https://iparlsetup.com/api/$iparl_username/{$type}s";
-        $function = $this->simplexml_load_file;
+        $url = $this->getLookupUrl($type);
+        $function = static::$simplexml_load_file;
         $xml = $function($url , null , LIBXML_NOCDATA);
-        $file = json_decode(json_encode($xml));
-        if ($file && $file->$type) {
-          foreach (is_array($file->$type) ? $file->$type : [$file->type] as $item) {
-            $data[$item->id] = $item->title;
+        $file = json_decode(json_encode($xml), TRUE);
+        if (is_array($file)) {
+          // Successfully downloaded data.
+          $data = [];
+          if (isset($file[$type])) {
+            foreach (is_array($file[$type]) ? $file[$type] : [$file[$type]] as $item) {
+              $data[$item['id']] = $item['title'];
+            }
           }
-          $cache->set($type, $data);
+          // Cache it (even an empty dataset) for 10 minutes.
+          $cache->set($cache_key, $data, 10*60);
         }
       }
     }
     return $data;
+  }
+  /**
+   * Return the iParl API URL
+   *
+   * @param string $type petition|action
+   * @return string URL
+   */
+  public function getLookupUrl($type) {
+    $iparl_username = Civi::settings()->get("iparl_user_name");
+    $url = "https://iparlsetup.com/api/$iparl_username/{$type}s";
+    return $url;
   }
 
 }

@@ -152,32 +152,85 @@ function iparl_civicrm_alterSettingsFolders(&$metaDataFolders = NULL) {
   _iparl_civix_civicrm_alterSettingsFolders($metaDataFolders);
 }
 
-/**
- * Functions below this ship commented out. Uncomment as required.
- *
 
 /**
- * Implements hook_civicrm_preProcess().
+ * Implements hook_civicrm_check
  *
- * @link http://wiki.civicrm.org/confluence/display/CRMDOC/hook_civicrm_preProcess
+ * - Check if we have a webhook key.
+ * - Check if we are configured with an iparl username
+ * - Check if we can fetch iparl data
  *
-function iparl_civicrm_preProcess($formName, &$form) {
-
-} // */
-
-/**
- * Implements hook_civicrm_navigationMenu().
- *
- * @link http://wiki.civicrm.org/confluence/display/CRMDOC/hook_civicrm_navigationMenu
+ * @see https://docs.civicrm.org/dev/en/latest/hooks/hook_civicrm_check/
  */
-function iparl_civicrm_navigationMenu(&$menu) {
-  _iparl_civix_insert_navigation_menu($menu, 'Administer', array(
-    'label' => ts('iParl Settings', array('domain' => 'uk.artfulrobot.civicrm.importhelper')),
-    'name' => 'iparlsettings',
-    'url' => 'civicrm/admin/iparl',
-    'permission' => 'administer CiviCRM',
-    'operator' => 'OR',
-    'separator' => 0,
-  ));
-  _iparl_civix_navigationMenu($menu);
+function iparl_civicrm_check(&$messages) {
+
+  $config_link = '<a href="'
+    . CRM_Utils_System::url('civicrm/admin/iparl')
+    . '" >Configure iParl Extension</a>';
+  $iparl_webhook_key = Civi::settings()->get('iparl_webhook_key');
+
+  if (!$iparl_webhook_key) {
+    $messages[] = new CRM_Utils_Check_Message(
+      'iparl_missing_webhook_key',
+      'You have not set your iParl webhook key. When iParl sends information to
+      CiviCRM it also sends this secret key (or password) so that CiviCRM knows
+      the incoming data is actually from iParl and not from some spammer! This
+      needs to be set up at both ends. The iParl extension requires this to function. '
+      . $config_link,
+      'Missing iParl webhook key',
+      'error',
+      'exclamation-circle'
+    );
+  }
+
+  $iparl_user_name = Civi::settings()->get('iparl_user_name');
+  if (!$iparl_user_name) {
+    $messages[] = new CRM_Utils_Check_Message(
+      'iparl_missing_user',
+      '<p>You have not set your iParl username. Your username is used to lookup
+      the names of actions and petitions so that the activities recorded make more sense.</p>
+      <p>e.g. without your username activity subjects will be like "Action 123", but
+      with your username it will be like "Action 123: Call for immediate divestment from fossil fuels"
+      </p><p>' . $config_link . '</p>',
+      'Missing iParl username',
+      'error',
+      'exclamation-circle'
+    );
+  }
+  else {
+    // Ok we have username, see if we can load the data.
+    $webhook = new CRM_Iparl_Page_IparlWebhook();
+
+    $is_error = FALSE;
+    $api_fails = [];
+
+    foreach (['action', 'petition'] as $type) {
+      $result = $webhook->getIparlObject($type, TRUE);
+      if (empty($result)) {
+        if ($result === NULL) {
+          // Actual failure.
+          $is_error = TRUE;
+          $api_fails[] = "Error: Failed to load $type titles from " . htmlspecialchars($webhook->getLookupUrl($type));
+        }
+        else {
+          $api_fails[] = "Note: Lookup found no $type titles from " . htmlspecialchars($webhook->getLookupUrl($type)) . " (this is fine if you haven't made any {$type}s on iParl.)";
+        }
+      }
+    }
+
+    if ($api_fails) {
+      $messages[] = new CRM_Utils_Check_Message(
+        'iparl_api_fail',
+        '<p>The iParl extension found:</p><ul><li>'
+        .implode('</li><li>', $api_fails)
+        . '</li></ul>'
+        . ($is_error ? '<p>Is your username correct? Could the API URL have changed? Could be a temporary failure?</p>' : '')
+        . '<p>' . $config_link . '</p>',
+        ($is_error ? 'Error' : 'Notice about') . ' fetching data from iParl API',
+        $is_error ? 'error' : 'notice'
+      );
+    }
+
+  }
+
 }

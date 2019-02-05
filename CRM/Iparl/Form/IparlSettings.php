@@ -78,6 +78,12 @@ class CRM_Iparl_Form_IparlSettings extends CRM_Core_Form {
     $this->_submittedValues = $this->exportValues();
     $this->saveSettings();
     parent::postProcess();
+    // Clear cache.
+    $cache = Civi::cache();
+    foreach (['action', 'petition'] as $type) {
+      $cache_key = "iparl_titles_$type";
+      $cache->delete($cache_key);
+    }
     CRM_Core_Session::setStatus(ts('iParl settings updated.'));
   }
 

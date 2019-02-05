@@ -31,7 +31,6 @@ class iparlTest extends \PHPUnit_Framework_TestCase implements HeadlessInterface
 
   public function setUp() {
     parent::setUp();
-    Civi::settings()->set('iparl_webhook_key', 'helloHorseHeadLikeYourJumper');
   }
 
   public function tearDown() {
@@ -39,35 +38,35 @@ class iparlTest extends \PHPUnit_Framework_TestCase implements HeadlessInterface
   }
 
   /**
-   * Example: Test that a version is returned.
+   * This is a rather long test.
+   *
+   * - Submit a webhook
+   * - Check the contact was created
+   * - check the phone was created
+   * - check the address was added
+   * - check the activity was added with subject 'Action 123'
+   * - configure iparl username (enabling lookup of action titles)
+   * - submit another webhook
+   * - check that the contact created earlier was found
+   * - check that the phone was identified as already there.
+   * - check that the address was identified as already there.
+   * - check that a new activity was added with subject including action title
+   * - check that the lookup of action title data was only called once.
+   * - check that accessing lookup for actions again returns cached value
+   * - check that lookup fires for petitions data.
+   *
    */
   public function testAction() {
+
     $webhook = new CRM_Iparl_Page_IparlWebhook();
     $webhook->iparl_logging = 'phpunit';
 
     // Mock the iParl XML API.
     $calls = 0;
-    $webhook->simplexml_load_file = function($url, $a, $b) use(&$calls) {
-      $calls++;
-      switch ($url) {
-      case "https://iparlsetup.com/api/superfoo/petitions":
-        return simplexml_load_string('<?xml version="1.0"?><xml>
-<petition><title>Some demo petition</title><id>456</id></petition>
-<petition><title>Another demo petition</title><id>678</id></petition>
-</xml>');
-        break;
+    $this->mockIparlTitleLookup($calls);
 
-      case "https://iparlsetup.com/api/superfoo/actions":
-        return simplexml_load_string('<?xml version="1.0"?><xml>
-<action><title>Some demo action</title><id>123</id></action>
-<action><title>Another demo action</title><id>234</id></action>
-</xml>');
-        break;
-
-      default:
-        throw new \Exception("unexpected URL: $url");
-      }
-    };
+    // Set the key
+    Civi::settings()->set('iparl_webhook_key', 'helloHorseHeadLikeYourJumper');
 
     $result = $webhook->processWebhook([
       'actionid' => 123,
@@ -185,4 +184,117 @@ class iparlTest extends \PHPUnit_Framework_TestCase implements HeadlessInterface
     $this->assertEquals(2, $calls);
   }
 
+  /**
+   * Check system status warnings/errors.
+   */
+  public function testChecksWork() {
+
+    $webhook = new CRM_Iparl_Page_IparlWebhook();
+    $calls = 0;
+    $this->mockIparlTitleLookup($calls, TRUE);
+    $webhook->iparl_logging = 'phpunit';
+
+    $result = civicrm_api3('System', 'check');
+    $this->assertEquals(0, $result['is_error'] ?? 1);
+    $found_missing_user = FALSE;
+    $found_missing_key = FALSE;
+    $found_failed_lookup = FALSE;
+    foreach ($result['values'] ?? [] as $message) {
+      if ($message['name'] === 'iparl_missing_user') {
+        $found_missing_user = TRUE;
+      }
+      elseif ($message['name'] === 'iparl_missing_webhook_key') {
+        $found_missing_key = TRUE;
+      }
+      elseif ($message['name'] === 'iparl_api_fail') {
+        $found_failed_lookup = TRUE;
+      }
+    }
+    $this->assertTrue($found_missing_key, 'Expected to find missing webhook key message in system checks');
+    $this->assertTrue($found_missing_user, 'Expected to find missing username message in system checks');
+    $this->assertFalse($found_failed_lookup, 'Expected to not find failed API message in system checks');
+
+  }
+  /**
+   * Check the API works.
+   */
+  public function testChecksApiWorks() {
+
+    $calls = 0;
+
+    // Set user, since the check is not done unless we have a username.
+    Civi::settings()->set('iparl_user_name', 'superfoo');
+
+    // Check a failed API call is detected.
+    // Mock title lookup to return NULL, i.e. api unavailable.
+    $this->mockIparlTitleLookup($calls, NULL);
+    $result = civicrm_api3('System', 'check');
+    $this->assertEquals(0, $result['is_error'] ?? 1);
+    $found_missing_user = FALSE;
+    $found_failed_lookup = FALSE;
+    foreach ($result['values'] ?? [] as $message) {
+      if ($message['name'] === 'iparl_missing_user' && $message['severity'] === 'error') {
+        $found_missing_user = TRUE;
+      }
+      elseif ($message['name'] === 'iparl_api_fail' && $message['severity'] === 'error') {
+        $found_failed_lookup = TRUE;
+      }
+    }
+    $this->assertFalse($found_missing_user, 'Did not expect missing user message but got one.');
+    $this->assertTrue($found_failed_lookup, 'Expected to find failed API message in system checks');
+
+    // Check an empty API call is detected.
+    // Mock title lookup to return NULL, i.e. api unavailable.
+    $this->mockIparlTitleLookup($calls, []);
+    $result = civicrm_api3('System', 'check');
+    $this->assertEquals(0, $result['is_error'] ?? 1);
+    $found_failed_lookup = FALSE;
+    foreach ($result['values'] ?? [] as $message) {
+      if ($message['name'] === 'iparl_api_fail' && $message['severity'] === 'notice') {
+        $found_failed_lookup = TRUE;
+      }
+    }
+    $this->assertTrue($found_failed_lookup, 'Expected to find failed API message in system checks for empty result');
+
+  }
+
+  /**
+   * For testing purposes.
+   *
+   * @param int &$calls Counts times it was called.
+   * @param mixed $fail. If given and not FALSE, this is the value that any
+   * simplexml_load_file call will return. Useful for returning null or []
+   */
+  public function mockIparlTitleLookup(&$calls, $fail=FALSE) {
+    // Mock the iParl XML API.
+    if ($fail !== FALSE) {
+      CRM_Iparl_Page_IparlWebhook::$simplexml_load_file = function($url, $a, $b) use (&$calls, $fail) {
+        $calls++;
+        return $fail;
+      };
+    }
+    else {
+      CRM_Iparl_Page_IparlWebhook::$simplexml_load_file = function($url, $a, $b) use(&$calls) {
+        $calls++;
+        switch ($url) {
+        case "https://iparlsetup.com/api/superfoo/petitions":
+          return simplexml_load_string('<?xml version="1.0"?><xml>
+  <petition><title>Some demo petition</title><id>456</id></petition>
+  <petition><title>Another demo petition</title><id>678</id></petition>
+  </xml>');
+          break;
+
+        case "https://iparlsetup.com/api/superfoo/actions":
+          return simplexml_load_string('<?xml version="1.0"?><xml>
+  <action><title>Some demo action</title><id>123</id></action>
+  <action><title>Another demo action</title><id>234</id></action>
+  </xml>');
+          break;
+
+        default:
+          throw new \Exception("unexpected URL: $url");
+        }
+      };
+    }
+  }
 }
