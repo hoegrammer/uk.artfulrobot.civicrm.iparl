@@ -47,7 +47,23 @@ Futher pull requests welcome :-)
 
 ## Changelog
 
-Version 1.1: adds support for iParl "Petition" actions (v1 just worked with
-"Lobby Actions").
+### Version 1.2
 
-Version 1.2: works on CiviCRM 5.9
+- works on CiviCRM 5.9 (and possibly NOT on earlier versions)
+
+- updated URLs for iParl's API for fetching titles (etc.) of actions, petitions.
+
+- iParl lookups are now cached for 10 minutes; will speed up processing.
+  However, if you add a new petition/action and test it immediately there's a
+  chance the name won't pull through. You can force the cache to clear by
+  visiting the iParl Extension's settings page (under the Administer menu)
+
+- System status checks (Administer » Administration » System Status) now check
+  for missing username/webhook key and check that the API can be used to
+  download data.
+
+- Basic phpunit tests created.
+
+### Version 1.1
+
+Adds support for iParl "Petition" actions (v1 just worked with "Lobby Actions").
