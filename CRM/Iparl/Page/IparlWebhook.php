@@ -77,6 +77,7 @@ class CRM_Iparl_Page_IparlWebhook extends CRM_Core_Page {
     $this->iparlLog("POSTed data: " . serialize($_POST));
     try {
       $this->processWebhook($_POST);
+      echo "OK";
       exit;
     }
     catch (Exception $e) {
