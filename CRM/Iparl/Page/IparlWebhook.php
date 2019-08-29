@@ -121,20 +121,25 @@ class CRM_Iparl_Page_IparlWebhook extends CRM_Core_Page {
       throw new Exception("iParl invalid auth.");
     }
 
+    $start = microtime(TRUE);
     $contact = $this->findOrCreate($data);
     $this->mergePhone($data, $contact);
     $this->mergeAddress($data, $contact);
     $activity = $this->recordActivity($data, $contact);
-    $this->iparlLog("Successfully created/updated contact $contact[id]");
-
-    $unused = CRM_Utils_Hook::$_nullObject;
+    $took = round(microtime(TRUE) - $start, 3);
+    $this->iparlLog("Successfully created/updated contact $contact[id] in {$took}s");
 
     // Issue #2
     // Provide a hook for custom action on the incoming data.
+    $start = microtime(TRUE);
+    $unused = CRM_Utils_Hook::$_nullObject;
     CRM_Utils_Hook::singleton()->invoke(
       3, // Number of useful arguments.
       $contact, $activity, $data, $unused, $unused, $unused,
       'civicrm_iparl_webhook_post_process');
+    $took = round(microtime(TRUE) - $start, 3);
+    $this->iparlLog("Processed hook_civicrm_iparl_webhook_post_process in {$took}s");
+
     return TRUE;
   }
 
@@ -395,9 +400,10 @@ class CRM_Iparl_Page_IparlWebhook extends CRM_Core_Page {
               $data[$item['id']] = $item['title'];
             }
           }
-          // Cache it (even an empty dataset) for 10 minutes.
-          $cache->set($cache_key, $data, 10*60);
-          $this->iparlLog("Caching " . count($data) . " results from $url for 10 minutes.");
+          // Cache it (even an empty dataset) for 1 hour. Note that saving the
+          // iParl Settings form will force a refresh of this cache.
+          $cache->set($cache_key, $data, 60*60);
+          $this->iparlLog("Caching " . count($data) . " results from $url for 1 hour.");
         }
         else {
           $this->iparlLog("Failed to load resource at: $url");

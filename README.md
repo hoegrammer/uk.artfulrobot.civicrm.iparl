@@ -43,6 +43,26 @@ Since version 1.3, this extension will handle single name fields, but please do
 not do this. It's not possible to separate a set of names into first and last
 names, better to ask users to do this; it's their personal data.
 
+## Performance and caching
+
+When a user submits an iParl petition, iParl sends the data to CiviCRM as a
+webhook. This extension receives that data, looks up (or creates) the contact,
+updates the record with an activity etc. In creating the activity, it needs to
+look up the action ID sent by iParl by making another query to iParl. For some
+reason (Aug 2019) this is hideously slow - near 10s - and while this is going on
+the user is left waiting.
+
+For this reason this extension caches this data (i.e. keeps its own copy). Only
+when the copy is older than 1 hour will it reload. Because this is still likely
+to be a problem for the poor user who stumbles upon the petition at that time, a
+scheduled job runs hourly to refresh the cache, reducing the chance a user gets
+hit by this.
+
+If you have made a new petition/changed a petition you may need/want to forcibly
+refresh the cache. You can do this by visiting the extension's settings page and
+simply pressing Save. As well as saving the settings, it reloads the cache.
+
+
 ## Developers
 
 There's now (since 1.3) a hook you can use to do your own processing of the

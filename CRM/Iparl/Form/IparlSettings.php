@@ -78,15 +78,12 @@ class CRM_Iparl_Form_IparlSettings extends CRM_Core_Form {
     $this->_submittedValues = $this->exportValues();
     $this->saveSettings();
     parent::postProcess();
-    // Clear cache.
-    $cache = CRM_Utils_Cache::create([
-      'type' => ['SqlGroup', 'ArrayCache'],
-      'name' => 'iparl',
-    ]);
+    // Reload cache.
+    $webhook = new CRM_Iparl_Page_IparlWebhook();
     foreach (['action', 'petition'] as $type) {
-      $cache_key = "iparl_titles_$type";
-      $cache->delete($cache_key);
+      $webhook->getIparlObject($type, TRUE);
     }
+
     CRM_Core_Session::setStatus(ts('iParl settings updated.'));
   }
 
