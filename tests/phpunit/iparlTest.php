@@ -76,7 +76,7 @@ class iparlTest extends \PHPUnit_Framework_TestCase implements HeadlessInterface
       'actionid' => 123,
       'secret'   => 'helloHorseHeadLikeYourJumper',
       'name'     => 'Wilma',
-      'lastname' => 'Flintstone',
+      'surname'  => 'Flintstone',
       'address1' => 'Cave 123',
       'address2' => 'Cave Street',
       'town'     => 'Rocksville',
@@ -96,7 +96,7 @@ class iparlTest extends \PHPUnit_Framework_TestCase implements HeadlessInterface
     $contact_id = current($result['values'])['id'];
 
     $this->assertEquals([
-      "Created contact $contact_id",
+      "Created contact $contact_id because email was not found.",
       "Created phone",
       "Created address",
       "Cache miss on looking up iparl_titles_action",
@@ -135,7 +135,7 @@ class iparlTest extends \PHPUnit_Framework_TestCase implements HeadlessInterface
       'actionid' => 123,
       'secret'   => 'helloHorseHeadLikeYourJumper',
       'name'     => 'Wilma',
-      'lastname' => 'Flintstone',
+      'surname'  => 'Flintstone',
       'address1' => 'Cave 123',
       'address2' => 'Cave Street',
       'town'     => 'Rocksville',
@@ -187,6 +187,66 @@ class iparlTest extends \PHPUnit_Framework_TestCase implements HeadlessInterface
     $lookup = $webhook->getIparlObject('petition');
     $this->assertInternalType('array', $lookup);
     $this->assertEquals(2, $calls);
+  }
+
+  /**
+   * Check name splitting works.
+   */
+  public function testNamesSeparateFirstAndLast() {
+
+    $webhook = new CRM_Iparl_Page_IparlWebhook();
+    $webhook->iparl_logging = 'phpunit';
+
+    $webhook->parseNames([
+      'name' => 'Wilma',
+      'surname' => 'Flintstone',
+    ]);
+    $this->assertEquals('Wilma', $webhook->first_name);
+    $this->assertEquals('Flintstone', $webhook->last_name);
+  }
+
+  /**
+   * Check name splitting works.
+   */
+  public function testNamesCombinedFirstAndLast() {
+
+    $webhook = new CRM_Iparl_Page_IparlWebhook();
+    $webhook->iparl_logging = 'phpunit';
+
+    $webhook->parseNames([
+      'name' => 'Wilma Flintstone',
+    ]);
+    $this->assertEquals('Wilma', $webhook->first_name);
+    $this->assertEquals('Flintstone', $webhook->last_name);
+  }
+
+  /**
+   * Check name splitting works.
+   */
+  public function testNamesCombinedOneWord() {
+
+    $webhook = new CRM_Iparl_Page_IparlWebhook();
+    $webhook->iparl_logging = 'phpunit';
+
+    $webhook->parseNames([
+      'name' => 'Wilma',
+    ]);
+    $this->assertEquals('Wilma', $webhook->first_name);
+    $this->assertEquals('', $webhook->last_name);
+  }
+
+  /**
+   * Check name splitting works.
+   *
+   * @expectedException Exception
+   * @expectedExceptionMessage iParl webhook requires data in the 'name' field.
+   */
+  public function testNamesNone() {
+
+    $webhook = new CRM_Iparl_Page_IparlWebhook();
+    $webhook->iparl_logging = 'phpunit';
+
+    $webhook->parseNames([]);
   }
 
   /**

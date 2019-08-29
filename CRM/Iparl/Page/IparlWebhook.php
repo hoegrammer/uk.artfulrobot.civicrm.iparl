@@ -7,7 +7,7 @@
  * Finds/creates contact, creates action. Success is indicated by simply responding "OK".
  *
  * @author Rich Lott / Artful Robot
- * @copyright Rich Lott 2016
+ * @copyright Rich Lott 2019
  * see licence.
  *
  * At time of writing, the iParl API provides:
@@ -16,8 +16,8 @@
  *
  * - actionid     The ID number of the action. This displays in the URL of each action and can also be accessed as an XML file using the 'List actions API' referred to here.
  * - secret       Secret string set when you set up this function. Testing for this in your script will allow you to filter out other, potentially hostile, attempts to feed information into your system. Not used in the redirect data string.
- * - name         Where only one name field is gathered it will display here. If a last name is also gathered, this will be the first name.
- * - lastname     Last name, if gathered
+ * - name         if the action gathered two name fields, this will be the first name, otherwise it will be the complete first/surname combination
+ * - surname      Surname, if gathered (update Aug 2019, was lastname)
  * - address1     Address line 1
  * - address2     Address line 2
  * - town         Town
@@ -50,6 +50,11 @@ class CRM_Iparl_Page_IparlWebhook extends CRM_Core_Page {
   /** @var mixed FALSE or (for test purposes) a callback to use in place of simplexml_load_file */
   public static $simplexml_load_file = 'simplexml_load_file';
   public $iparl_logging;
+
+  /** @var string parsed first name */
+  public $first_name;
+  /** @var string parsed last name */
+  public $last_name;
   /**
    * Log, if logging is enabled.
    */
@@ -97,12 +102,15 @@ class CRM_Iparl_Page_IparlWebhook extends CRM_Core_Page {
    */
   public function processWebhook($data) {
     // Check secret.
-    foreach (array('secret', 'name', 'lastname', 'email') as $_) {
+    foreach (array('secret', 'email') as $_) {
       if (empty($data[$_])) {
         $this->iparlLog("POSTed data missing (at least) $_");
         throw new Exception("POST data is invalid or incomplete.");
       }
     }
+
+    $this->parseNames($data);
+
     $key = civicrm_api3('Setting', 'getvalue', array( 'name' => "iparl_webhook_key" ));
     if (empty($key)) {
       $this->iparlLog("no iparl_webhook_key set. Will not process.");
@@ -121,6 +129,53 @@ class CRM_Iparl_Page_IparlWebhook extends CRM_Core_Page {
     return TRUE;
   }
 
+  /**
+   * Ensure we have name data in incoming data.
+   *
+   * If "Separate fields for first & last names" is not checked in the config
+   *
+   * iParl docs say of the 'name' data key:
+   *
+   * > name    - if the action gathered two name fields, this will be the first name,
+   * >           otherwise it will be the complete first/surname combination
+   * >
+   * > surname - surname if gathered for this action
+   *
+   * (29 Aug 2019) https://iparlsetup.com/setup/help#supporterwebhook
+   *
+   * This function looks for 'surname' - if it's set it uses 'name' as first
+   * name and surname as last name. Otherwise it tries to separate 'name' into
+   * first and last - the first name is the first word before a space, the rest
+   * is considered the surname. (Because this is not always right it's better
+   * to collect separate first, last names yourself.)
+   */
+  public function parseNames($data) {
+    $this->first_name = '';
+    $this->last_name = '';
+
+    $input_surname = trim($data['surname'] ?? '');
+    $input_name = trim($data['name'] ?? '');
+
+    if (!empty($input_surname)) {
+      $this->last_name = $data['surname'];
+      $this->first_name = $data['name'];
+    }
+    elseif (!empty($input_name)) {
+      $parts = preg_split('/\s+/', $input_name);
+      if (count($parts) === 1) {
+        // User only supplied one name.
+        $this->first_name = $parts[0];
+        $this->last_name = '';
+      }
+      else {
+        $this->first_name = array_shift($parts);
+        $this->last_name = implode(' ', $parts);
+      }
+    }
+    else {
+      throw new Exception("iParl webhook requires data in the 'name' field.");
+    }
+  }
   public function findOrCreate($input) {
     // Look up the email first.
     $result = civicrm_api3('Email', 'get', array(
@@ -131,7 +186,7 @@ class CRM_Iparl_Page_IparlWebhook extends CRM_Core_Page {
 
     if ($result['count'] == 0) {
       $result =  $this->createContact($input);
-      $this->iparlLog("Created contact $result[id]");
+      $this->iparlLog("Created contact $result[id] because email was not found.");
       return $result;
     }
     elseif ($result['count'] == 1) {
@@ -150,8 +205,8 @@ class CRM_Iparl_Page_IparlWebhook extends CRM_Core_Page {
       }
     }
     foreach ($unique_contacts as $contact_id => $contact) {
-      if ($input['name'] == $contact['first_name']
-        && $input['lastname'] == $contact['last_name']) {
+      if ($this->first_name == $contact['first_name']
+        && (!empty($this->last_name) && $this->last_name == $contact['last_name'])) {
         // Found a match on name and email, return that.
         $this->iparlLog("Found contact $contact[id] by email and name match.");
         return $contact;
@@ -159,17 +214,19 @@ class CRM_Iparl_Page_IparlWebhook extends CRM_Core_Page {
     }
 
     // If we were unable to match on first and last name, try last name only.
-    foreach ($unique_contacts as $contact_id => $contact) {
-      if ($input['lastname'] == $contact['last_name']) {
-        // Found a match on last name and email, return that.
-        $this->iparlLog("Found contact $contact[id] by email and last name match.");
-        return $contact;
+    if ($this->last_name) {
+      foreach ($unique_contacts as $contact_id => $contact) {
+        if ($this->last_name == $contact['last_name']) {
+          // Found a match on last name and email, return that.
+          $this->iparlLog("Found contact $contact[id] by email and last name match.");
+          return $contact;
+        }
       }
     }
 
     // If we were unable to match on first and last name, try first name only.
     foreach ($unique_contacts as $contact_id => $contact) {
-      if ($input['firstname'] == $contact['first_name']) {
+      if ($this->first_name == $contact['first_name']) {
         // Found a match on last name and email, return that.
         $this->iparlLog("Found contact $contact[id] by email and first name match.");
         return $contact;
@@ -179,7 +236,7 @@ class CRM_Iparl_Page_IparlWebhook extends CRM_Core_Page {
     // We know the email, but we think it belongs to someone else.
     // Create new contact.
     $result = $this->createContact($input);
-    $this->iparlLog("Created contact $result[id]");
+    $this->iparlLog("Created contact $result[id] because could not match on email and name \n" . json_encode($result));
     return $result;
   }
   /**
@@ -187,10 +244,10 @@ class CRM_Iparl_Page_IparlWebhook extends CRM_Core_Page {
    */
   public function createContact($input) {
     $params = array(
-      'first_name' => $input['name'],
-      'last_name' => $input['lastname'],
+      'first_name'   => $this->first_name,
+      'last_name'    => $this->last_name,
       'contact_type' => 'Individual',
-      'email' => $input['email'],
+      'email'        => $input['email'],
     );
     $result = civicrm_api3('Contact', 'create', $params);
     return $result;

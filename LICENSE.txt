@@ -1,5 +1,5 @@
 Package: uk.artfulrobot.iparl
-Copyright (C) 2016, Rich Lott <forums@artfulrobot.uk>
+Copyright (C) 2016-2019, Rich Lott <forums@artfulrobot.uk>
 Licensed under the GNU Affero Public License 3.0 (below).
 
 -------------------------------------------------------------------------------
