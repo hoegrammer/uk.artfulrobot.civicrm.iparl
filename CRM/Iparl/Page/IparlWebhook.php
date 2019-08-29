@@ -124,8 +124,17 @@ class CRM_Iparl_Page_IparlWebhook extends CRM_Core_Page {
     $contact = $this->findOrCreate($data);
     $this->mergePhone($data, $contact);
     $this->mergeAddress($data, $contact);
-    $this->recordActivity($data, $contact);
+    $activity = $this->recordActivity($data, $contact);
     $this->iparlLog("Successfully created/updated contact $contact[id]");
+
+    $unused = CRM_Utils_Hook::$_nullObject;
+
+    // Issue #2
+    // Provide a hook for custom action on the incoming data.
+    CRM_Utils_Hook::singleton()->invoke(
+      3, // Number of useful arguments.
+      $contact, $activity, $data, $unused, $unused, $unused,
+      'civicrm_iparl_webhook_post_process');
     return TRUE;
   }
 

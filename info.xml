@@ -15,14 +15,15 @@
     <url desc="Licensing">http://www.gnu.org/licenses/agpl-3.0.html</url>
   </urls>
   <releaseDate>2019-02-05</releaseDate>
-  <version>1.2</version>
-  <develStage>beta</develStage>
+  <version>1.3</version>
+  <develStage>stable</develStage>
   <compatibility>
     <ver>4.4.6</ver>
     <ver>5.0</ver>
     <ver>5.9</ver>
+    <ver>5.15</ver>
   </compatibility>
-  <comments>This was written with funding from the Equality Trust.</comments>
+  <comments></comments>
   <civix>
     <namespace>CRM/Iparl</namespace>
   </civix>

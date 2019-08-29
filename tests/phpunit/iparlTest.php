@@ -62,6 +62,7 @@ class iparlTest extends \PHPUnit_Framework_TestCase implements HeadlessInterface
    *
    */
   public function testAction() {
+    global $iparl_hook_test;
 
     $webhook = new CRM_Iparl_Page_IparlWebhook();
     $webhook->iparl_logging = 'phpunit';
@@ -127,6 +128,11 @@ class iparlTest extends \PHPUnit_Framework_TestCase implements HeadlessInterface
     $this->assertEquals(0, $result['is_error']);
     $this->assertEquals(1, $result['count']);
     $this->assertEquals('Action 123: Some demo action', $result['values'][0]['subject']);
+
+
+    // Check that the hook was fired.
+    $this->assertInternalType('array', $iparl_hook_test);
+    $this->assertArrayHasKey('contact', $iparl_hook_test);
 
     // Repeat. There should now be two activities but only one contact
     // We set the username though to obtain more info for the activity.
@@ -362,4 +368,16 @@ class iparlTest extends \PHPUnit_Framework_TestCase implements HeadlessInterface
       };
     }
   }
+}
+
+/**
+ * Implement a hook.
+ */
+function iparl_civicrm_iparl_webhook_post_process($contact, $activity, $webhook_data) {
+  global $iparl_hook_test;
+  $iparl_hook_test = [
+    'contact' => $contact,
+    'activity' => $activity,
+    'webhook_data' => $webhook_data
+  ];
 }

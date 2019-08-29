@@ -22,7 +22,7 @@ You can test it like
 curl -k -L 'https://your-webhook-url' \
      -d secret=helloHorseHeadLikeYourJumper \
      -d name=Jo \
-     -d lastname=Bloggs \
+     -d surname=Bloggs \
      -d email=jo@example.com \
      -d actionid=1
 ```
@@ -37,11 +37,41 @@ the file in CiviCRM's ConfigAndLog directory. Hint: it has iparl in the name.
 First time you call it you should see a new contact created. Second time you
 should just see another activity added to that contact's record.
 
+## Configuring your iParl Actions
+
+Since version 1.3, this extension will handle single name fields, but please do
+not do this. It's not possible to separate a set of names into first and last
+names, better to ask users to do this; it's their personal data.
+
+## Developers
+
+There's now (since 1.3) a hook you can use to do your own processing of the
+incoming webhook data (e.g. check/record consent and add to groups).
+
+Example: if your custom extension is called `myext` then write a function like
+this:
+
+    /**
+     * My custom business logic.
+     *
+     * Implements hook_civicrm_iparl_webhook_post_process
+     *
+     * @param array $contact The contact that the iParl extension ocreated/updated.
+     * @param array $activity The activity that the iParl extension created.
+     * @param array $webhook_data The raw data.
+     */
+    function myext_civicrm_iparl_webhook_post_process(
+      $contact, $activity, $webhook_data) {
+
+      // ... your work here ...
+    }
+
+
 ## About
 
 This was written by Rich Lott ([Artful Robot](https://artfulrobot.uk)) who
 stitches together open source tech for people who want to change the world. It
-was funded by the Equality Trust.
+has been funded by the Equality Trust and We Own It.
 
 Futher pull requests welcome :-)
 

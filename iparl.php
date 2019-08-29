@@ -242,3 +242,4 @@ function iparl_civicrm_check(&$messages) {
   }
 
 }
+
