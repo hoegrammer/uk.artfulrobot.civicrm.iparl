@@ -96,13 +96,13 @@ class iparlTest extends \PHPUnit_Framework_TestCase implements HeadlessInterface
     $this->assertEquals(1, $result['count']);
     $contact_id = current($result['values'])['id'];
 
-    $this->assertEquals([
+    $this->assertArrayRegex([
       "Created contact $contact_id because email was not found.",
       "Created phone",
       "Created address",
       "Cache miss on looking up iparl_titles_action",
-      "Caching 2 results from https://iparlsetup.com/api/superfoo/actions for 10 minutes.",
-      "Successfully created/updated contact $contact_id",
+      "Caching 2 results from https://iparlsetup.com/api/superfoo/actions for 1 hour.",
+      "/^Successfully created\/updated contact $contact_id in \d+(\.\d+)?s$/",
     ], $webhook->test_log, "Failed testing that a new contact was created.");
 
     // There should be a phone.
@@ -160,12 +160,13 @@ class iparlTest extends \PHPUnit_Framework_TestCase implements HeadlessInterface
     $this->assertEquals(1, $result['count']);
     $this->assertEquals($contact_id, current($result['values'])['id']);
 
-    $this->assertEquals([
+    $this->assertArrayRegex([
       "Found contact $contact_id by email match.",
       "Phone already present",
       "Address already existed.",
       "Cache hit on looking up iparl_titles_action",
-      "Successfully created/updated contact $contact_id",
+      "/^Successfully created\/updated contact $contact_id in \d+(\.\d+)?s$/",
+      "/^Processed hook_civicrm_iparl_webhook_post_process in \d+(\.\d+)?s$/",
     ], $webhook->test_log, "Failed testing that a 2nd action resulted in the existing contact being updated.");
 
     // There should be one phone.
@@ -366,6 +367,34 @@ class iparlTest extends \PHPUnit_Framework_TestCase implements HeadlessInterface
           throw new \Exception("unexpected URL: $url");
         }
       };
+    }
+  }
+  public function assertArrayRegex($expected, $actual) {
+    $errors = [];
+    $this->assertInternalType('array', $actual);
+    foreach ($expected as $i => $pattern) {
+      if (!isset($actual[$i])) {
+        $errors[] = "- $i => $pattern\n";
+        $errors[] = "+ $i => (MISSING)\n";
+      }
+      elseif (substr($pattern, 0, 1) === '/') {
+        // regex match.
+        if (!preg_match($pattern, $actual[$i])) {
+          $errors[] = "- $i => $pattern\n";
+          $errors[] = "+ $i => {$actual[$i]}\n";
+        }
+      }
+      else {
+        // String match.
+        if ($pattern !== $actual[$i]) {
+          $errors[] = "- $i => $pattern\n";
+          $errors[] = "+ $i => {$actual[$i]}\n";
+        }
+      }
+    }
+    $errors = implode('', $errors);
+    if ($errors) {
+      $this->fail($errors);
     }
   }
 }
