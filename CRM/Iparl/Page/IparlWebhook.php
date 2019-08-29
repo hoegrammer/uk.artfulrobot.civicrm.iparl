@@ -337,6 +337,9 @@ class CRM_Iparl_Page_IparlWebhook extends CRM_Core_Page {
           $this->iparlLog("Failed to load resource at: $url");
         }
       }
+      else {
+        $this->iparlLog("Missing iparl_user_name, cannot access iParl API");
+      }
     }
     else {
       $this->iparlLog("Cache hit on looking up $cache_key");

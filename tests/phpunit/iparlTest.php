@@ -33,6 +33,11 @@ class iparlTest extends \PHPUnit_Framework_TestCase implements HeadlessInterface
     parent::setUp();
   }
 
+  public function setMockIParlSetting() {
+    Civi::settings()->set('iparl_webhook_key', 'helloHorseHeadLikeYourJumper');
+    Civi::settings()->set('iparl_user_name', 'superfoo');
+  }
+
   public function tearDown() {
     parent::tearDown();
   }
@@ -64,9 +69,8 @@ class iparlTest extends \PHPUnit_Framework_TestCase implements HeadlessInterface
     // Mock the iParl XML API.
     $calls = 0;
     $this->mockIparlTitleLookup($calls);
+    $this->setMockIParlSetting();
 
-    // Set the key
-    Civi::settings()->set('iparl_webhook_key', 'helloHorseHeadLikeYourJumper');
 
     $result = $webhook->processWebhook([
       'actionid' => 123,
@@ -95,8 +99,10 @@ class iparlTest extends \PHPUnit_Framework_TestCase implements HeadlessInterface
       "Created contact $contact_id",
       "Created phone",
       "Created address",
+      "Cache miss on looking up iparl_titles_action",
+      "Caching 2 results from https://iparlsetup.com/api/superfoo/actions for 10 minutes.",
       "Successfully created/updated contact $contact_id",
-    ], $webhook->test_log);
+    ], $webhook->test_log, "Failed testing that a new contact was created.");
 
     // There should be a phone.
     $result = civicrm_api3('Phone', 'get', ['sequential' => 1, 'contact_id' => $contact_id]);
@@ -120,12 +126,10 @@ class iparlTest extends \PHPUnit_Framework_TestCase implements HeadlessInterface
       ]);
     $this->assertEquals(0, $result['is_error']);
     $this->assertEquals(1, $result['count']);
-    // As we did not supply username, the subject should be...
-    $this->assertEquals('Action 123', $result['values'][0]['subject']);
+    $this->assertEquals('Action 123: Some demo action', $result['values'][0]['subject']);
 
     // Repeat. There should now be two activities but only one contact
     // We set the username though to obtain more info for the activity.
-    Civi::settings()->set('iparl_user_name', 'superfoo');
     $webhook->test_log = [];
     $result = $webhook->processWebhook([
       'actionid' => 123,
@@ -154,8 +158,9 @@ class iparlTest extends \PHPUnit_Framework_TestCase implements HeadlessInterface
       "Found contact $contact_id by email match.",
       "Phone already present",
       "Address already existed.",
+      "Cache hit on looking up iparl_titles_action",
       "Successfully created/updated contact $contact_id",
-    ], $webhook->test_log);
+    ], $webhook->test_log, "Failed testing that a 2nd action resulted in the existing contact being updated.");
 
     // There should be one phone.
     $result = civicrm_api3('Phone', 'get', ['sequential' => 1, 'contact_id' => $contact_id]);
