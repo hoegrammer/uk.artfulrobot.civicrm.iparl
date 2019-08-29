@@ -1,7 +1,7 @@
 <?xml version="1.0"?>
 <menu>
   <item>
-    <path>civicrm/admin/iparl</path>
+    <path>civicrm/admin/setting/iparl</path>
     <page_callback>CRM_Iparl_Form_IparlSettings</page_callback>
     <title>IparlSettings</title>
     <access_arguments>administer CiviCRM</access_arguments>

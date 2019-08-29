@@ -1,5 +1,7 @@
 <?php
 
+use CRM_Iparl_ExtensionUtil as E;
+
 require_once 'iparl.civix.php';
 
 /**
@@ -55,7 +57,7 @@ function iparl_civicrm_install() {
   ),
   array( 'label' => 'iParl action' ));
 
-  $url = CRM_Utils_System::url('civicrm/admin/iparl');
+  $url = CRM_Utils_System::url('civicrm/admin/setting/iparl');
   CRM_Core_Session::setStatus(ts("You must now <a href='$url'>configure the iParl extension</a>."));
 }
 
@@ -160,6 +162,14 @@ function iparl_civicrm_alterSettingsFolders(&$metaDataFolders = NULL) {
   _iparl_civix_civicrm_alterSettingsFolders($metaDataFolders);
 }
 
+function iparl_civicrm_navigationMenu(&$menu) {
+  _iparl_civix_insert_navigation_menu($menu, 'Administer/System Settings', [
+    'label'      => E::ts('iParl Integration Settings'),
+    'name'       => 'iparl-settings',
+    'url'        => 'civicrm/admin/setting/iparl',
+    'permission' => 'administer CiviCRM',
+  ]);
+}
 
 /**
  * Implements hook_civicrm_check
@@ -173,7 +183,7 @@ function iparl_civicrm_alterSettingsFolders(&$metaDataFolders = NULL) {
 function iparl_civicrm_check(&$messages) {
 
   $config_link = '<a href="'
-    . CRM_Utils_System::url('civicrm/admin/iparl')
+    . CRM_Utils_System::url('civicrm/admin/setting/iparl')
     . '" >Configure iParl Extension</a>';
   $iparl_webhook_key = Civi::settings()->get('iparl_webhook_key');
 

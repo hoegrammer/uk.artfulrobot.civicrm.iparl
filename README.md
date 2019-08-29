@@ -14,7 +14,7 @@ Organic Campaigns?", "No, not a problem" sort of non-technical stuff.
 You'll need a functioning iParl account before starting.
 
 Install the extension in the normal way. A pop-up will tell you to go to
-`civicrm/admin/iparl` to configure things. That page has the instructions.
+`civicrm/admin/setting/iparl` to configure things. That page has the instructions.
 **You can also find this link under the Administer » iParl Settings**
 
 You can test it like
