@@ -97,6 +97,24 @@ Futher pull requests welcome :-)
 
 ## Changelog
 
+### Version 1.3.2
+
+- tested on CiviCRM 5.15
+
+- iParl lookups now cached for 1 hour (you can still force a refresh by saving
+  the settings form).
+
+- New scheduled job runs hourly to keep the cache up to date.
+
+- Settings form now moved to `civicrm/admin/setting/iparl` which is more
+  standard (find it under **System Settings** in the menu)
+
+- New hook for developers (see *Developers* below) to do more processing of
+  incoming data.
+
+- updated URLs for iParl's API for fetching titles (etc.) of actions, petitions
+   (again)
+
 ### Version 1.2
 
 - works on CiviCRM 5.9 (and possibly NOT on earlier versions)
