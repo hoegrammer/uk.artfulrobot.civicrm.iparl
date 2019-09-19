@@ -426,7 +426,13 @@ class CRM_Iparl_Page_IparlWebhook extends CRM_Core_Page {
    */
   public function getLookupUrl($type) {
     $iparl_username = Civi::settings()->get("iparl_user_name");
-    $url = "https://iparlsetup.com/api/$iparl_username/{$type}s";
+    $url = "https://iparlsetup.com/api/$iparl_username/";
+    if ($type === 'action') {
+      $url .= "actions.xml"; // new .xml extension required ~Autumn 2019
+    }
+    elseif ($type === 'petition') {
+      $url .= "petitions"; // old style, without .xml
+    }
     return $url;
   }
 
