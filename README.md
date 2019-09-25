@@ -73,6 +73,14 @@ If you have made a new petition/changed a petition you may need/want to forcibly
 refresh the cache. You can do this by visiting the extension's settings page and
 simply pressing Save. As well as saving the settings, it reloads the cache.
 
+## Webhook processing
+
+Since v1.4.0 webhooks are not processed in real time but are instead added to a
+queue. The queue is processed by a new Scheduled Job. By default this scheduled
+job is set up so that it runs every time Cron fires, and that it does a maximum
+of 10 minutes' procesing of the iParl queue at once. This should be ample time
+for most sites. You can change the schedule and the maximum execution time (in
+seconds) from the Scheduled Jobs admin page.
 
 ## Developers
 
@@ -107,6 +115,21 @@ has been funded by the Equality Trust and We Own It.
 Futher pull requests welcome :-)
 
 ## Changelog
+
+### Version 1.4.0
+
+- Processing webhooks is now deferred to a queue. This means that the user sees
+  confirmation that their action has been successfully taken quicker (because
+  webhooks are fired in sync and real time by iParl). It also hopes to avoid a
+  deadlock situation that can occur on busy sites when two (or more) processes
+  start creating Contacts, Activities etc. at the same time. Webhooks are now
+  stored in a queue and a Scheduled Job is set up to process the queue. By
+  ensuring only one process accesses the queue at once, this should help
+  avoid deadlocks. Depending on how often cron fires, it does mean there may be
+  a delay.
+
+- tested on CiviCRM 5.15
+
 
 ### Version 1.3.2
 
