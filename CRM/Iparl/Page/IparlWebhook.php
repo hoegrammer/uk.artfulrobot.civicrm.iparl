@@ -79,19 +79,63 @@ class CRM_Iparl_Page_IparlWebhook extends CRM_Core_Page {
     CRM_Core_Error::debug_log_message($message, $out=FALSE, $component='iparl', $priority);
   }
   public function run() {
-    $this->iparlLog("POSTed data: " . serialize($_POST));
     try {
-      $this->processWebhook($_POST);
+      // We do very minimal checks here before queuing it for async processing.
+      $data = $_POST;
+
+      // Check minimal required fields
+      $errors = [];
+      foreach (array('secret', 'email') as $_) {
+        if (empty($data[$_])) {
+          $errors[] = $_;
+        }
+      }
+      if ($errors) {
+        throw new Exception("POST data is invalid or incomplete. Missing: " . implode(', ', $errors));
+      }
+
+      // Check secret.
+      $key = civicrm_api3('Setting', 'getvalue', array( 'name' => "iparl_webhook_key" ));
+      if (empty($key)) {
+        throw new Exception("iParl secret not configured.");
+      }
+      if ($data['secret'] !== $key) {
+        throw new Exception("iParl key mismatch.");
+      }
+
+      // Data looks OK. Remove the secret as we won't check it again.
+      unset($data['secret']);
+      $this->queueWebhook($data);
       echo "OK";
-      exit;
     }
     catch (Exception $e) {
-      error_log($e->getMessage());
+      $this->iparlLog("EXCEPTION: ". $e->getMessage() .  "\nWhile processing: " . json_encode($_POST));
       header("$_SERVER[SERVER_PROTOCOL] 400 Bad request");
-      exit;
     }
+    exit;
   }
 
+  /**
+   */
+  public function queueWebhook($data) {
+    $queue = CRM_Queue_Service::singleton()->create([
+      'type'  => 'Sql',
+      'name'  => 'iparl-webhooks',
+      'reset' => FALSE, // We do NOT want to delete an existing queue!
+    ]);
+    $queue->createItem(new CRM_Queue_Task(
+      ['CRM_Iparl_Page_IparlWebhook', 'processQueueItem'], // callback
+      [$data], // arguments
+      "" // title
+    ));
+  }
+  /**
+   * Provided for Queue Task
+   */
+  public static function processQueueItem($queueTaskContext, $data) {
+    $obj = new static();
+    return $obj->processWebhook($data);
+  }
   /**
    * The main procesing method.
    *
@@ -101,44 +145,33 @@ class CRM_Iparl_Page_IparlWebhook extends CRM_Core_Page {
    * @return bool TRUE on success
    */
   public function processWebhook($data) {
-    // Check secret.
-    foreach (array('secret', 'email') as $_) {
-      if (empty($data[$_])) {
-        $this->iparlLog("POSTed data missing (at least) $_");
-        throw new Exception("POST data is invalid or incomplete.");
-      }
+
+    try {
+      $this->iparlLog("Processing queued webhook: " . json_encode($data));
+      $start = microtime(TRUE);
+      $this->parseNames($data);
+      $contact = $this->findOrCreate($data);
+      $this->mergePhone($data, $contact);
+      $this->mergeAddress($data, $contact);
+      $activity = $this->recordActivity($data, $contact);
+      $took = round(microtime(TRUE) - $start, 3);
+      $this->iparlLog("Successfully created/updated contact $contact[id] in {$took}s");
+
+      // Issue #2
+      // Provide a hook for custom action on the incoming data.
+      $start = microtime(TRUE);
+      $unused = CRM_Utils_Hook::$_nullObject;
+      CRM_Utils_Hook::singleton()->invoke(
+        3, // Number of useful arguments.
+        $contact, $activity, $data, $unused, $unused, $unused,
+        'civicrm_iparl_webhook_post_process');
+      $took = round(microtime(TRUE) - $start, 3);
+      $this->iparlLog("Processed hook_civicrm_iparl_webhook_post_process in {$took}s");
     }
-
-    $this->parseNames($data);
-
-    $key = civicrm_api3('Setting', 'getvalue', array( 'name' => "iparl_webhook_key" ));
-    if (empty($key)) {
-      $this->iparlLog("no iparl_webhook_key set. Will not process.");
-      throw new Exception("iParl secret not configured.");
+    catch (\Exception $e) {
+      $this->iparlLog("Failed processing: " . $e->getMessage());
+      return FALSE;
     }
-    if ($data['secret'] !== $key) {
-      $this->iparlLog("iparl_webhook_key mismatch. Will not process.");
-      throw new Exception("iParl invalid auth.");
-    }
-
-    $start = microtime(TRUE);
-    $contact = $this->findOrCreate($data);
-    $this->mergePhone($data, $contact);
-    $this->mergeAddress($data, $contact);
-    $activity = $this->recordActivity($data, $contact);
-    $took = round(microtime(TRUE) - $start, 3);
-    $this->iparlLog("Successfully created/updated contact $contact[id] in {$took}s");
-
-    // Issue #2
-    // Provide a hook for custom action on the incoming data.
-    $start = microtime(TRUE);
-    $unused = CRM_Utils_Hook::$_nullObject;
-    CRM_Utils_Hook::singleton()->invoke(
-      3, // Number of useful arguments.
-      $contact, $activity, $data, $unused, $unused, $unused,
-      'civicrm_iparl_webhook_post_process');
-    $took = round(microtime(TRUE) - $start, 3);
-    $this->iparlLog("Processed hook_civicrm_iparl_webhook_post_process in {$took}s");
 
     return TRUE;
   }
@@ -343,6 +376,9 @@ class CRM_Iparl_Page_IparlWebhook extends CRM_Core_Page {
       $lookup = $this->getIparlObject($is_petition ? 'petition' : 'action');
       if (isset($lookup[$input['actionid']])) {
         $subject .= ": " . $lookup[$input['actionid']];
+      }
+      else {
+        throw new \Exception("Failed to lookup data for actionid.");
       }
     }
 

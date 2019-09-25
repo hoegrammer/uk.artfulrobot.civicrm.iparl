@@ -19,12 +19,23 @@ Install the extension in the normal way. A pop-up will tell you to go to
 
 You can test it like
 ```sh
-curl -k -L 'https://your-webhook-url' \
+curl -k -L 'https://yoursite.org/civicrm/iparl-webhook' \
      -d secret=helloHorseHeadLikeYourJumper \
      -d name=Jo \
      -d surname=Bloggs \
      -d email=jo@example.com \
      -d actionid=1
+```
+
+or, with httpie
+
+```sh
+http --verify no -f POST 'https://yoursite.org/civicrm/iparl-webhook' \
+     secret=helloHorseHeadLikeYourJumper \
+     name=Jo \
+     lastname=Bloggs \
+     email=jo@example.com \
+     actionid=1
 ```
 
 Where your-webhook-url you can get from the settings page (it's basically your
