@@ -420,7 +420,7 @@ class CRM_Iparl_Page_IparlWebhook extends CRM_Core_Page {
     $cache_key = "iparl_titles_$type";
     $data = $bypass_cache ? NULL : $cache->get($cache_key, NULL);
     if ($data === NULL) {
-      $this->iparlLog("Cache miss on looking up $cache_key");
+      $this->iparlLog("Cache " . ($bypass_cache ? 'bypass' : 'miss') . " on looking up $cache_key");
       // Fetch from iparl api.
       $iparl_username = Civi::settings()->get("iparl_user_name");
       if ($iparl_username) {
