@@ -52,7 +52,16 @@ function civicrm_api3_job_Processiparlwebhookqueue($params) {
   do {
     $result = $runner->runNext(false);
     if ($result['is_error']) {
-      $error = 1;
+      if ($result['exception']->getMessage() === 'Failed to claim next task') {
+        // Queue empty, or another process busy.
+        // This is not an error to us.
+        break;
+      }
+      else {
+        // Some other exception.
+        $error = 1;
+        break;
+      }
     }
     else {
       $processed++;
