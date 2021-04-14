@@ -77,7 +77,7 @@ class QueueTest extends \PHPUnit\Framework\TestCase implements HeadlessInterface
     }
     catch (\Exception $e) {
       // We expect this.
-      $this->assertEquals("Task returned false", $e->getMessage(), "We expect the Job to throw an exception because we included data that would cause an error, but we got an unexpected error message.");
+      $this->assertEquals("1 errors - see iParl log file.", $e->getMessage(), "We expect the Job to throw an exception because we included data that would cause an error, but we got an unexpected error message.");
     }
 
     $result = CRM_Core_DAO::singleValueQuery("SELECT COUNT(*) FROM civicrm_queue_item WHERE queue_name = 'iparl-webhooks';");
@@ -85,6 +85,10 @@ class QueueTest extends \PHPUnit\Framework\TestCase implements HeadlessInterface
 
     $result = CRM_Core_DAO::singleValueQuery("SELECT COUNT(*) FROM civicrm_queue_item WHERE queue_name = 'iparl-webhooks-failed';");
     $this->assertEquals(1, $result, "Expected to find 1 iparl-webhooks-failed queue items");
+
+  }
+
+  public function tearDown() {
 
     // Note, for some reason this test leaves data in the database; it must do something
     // outside of a transaction I think. So we do our own cleanup here:

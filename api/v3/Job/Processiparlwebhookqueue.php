@@ -50,7 +50,7 @@ function civicrm_api3_job_Processiparlwebhookqueue($params) {
   }
 
   $processed = 0;
-  $errors = [];
+  $errors = 0;
   do {
     $result = $runner->runNext(false);
     if ($result['is_error']) {
@@ -63,11 +63,11 @@ function civicrm_api3_job_Processiparlwebhookqueue($params) {
         }
         else {
           // Some other exception.
-          $errors[] = $result['exception']->getMessage();
+          $errors++;
         }
       }
       else {
-        $errors[] = "Non-exception error encountered.";
+        $errors++;
       }
     }
     else {
@@ -80,7 +80,7 @@ function civicrm_api3_job_Processiparlwebhookqueue($params) {
   } while (!$maxRunTime || time() < $maxRunTime);
 
   if ($errors) {
-    return ['processed' => $processed, 'is_error' => 1, 'error_message' => implode("\n", $errors)];
+    return ['processed' => $processed, 'is_error' => 1, 'error_message' => "$errors errors - see iParl log file."];
   }
   return ['processed' => $processed, 'is_error' => 0];
 }
