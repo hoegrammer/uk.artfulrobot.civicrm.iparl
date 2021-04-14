@@ -30,12 +30,12 @@ function civicrm_api3_job_Processiparlwebhookqueue($params) {
     'reset' => FALSE, // We do NOT want to delete an existing queue!
   ]);
 
-  // Note: we use ERROR_CONTINUE because if there's an error we copy the data
-  // to a separate queue.
+  // Get a runner that will quit if an error is received from a task.
+  // We only return FALSE from processing if we can't get the definitions from iparl.
   $runner = new CRM_Queue_Runner([
     'title' => ts('iParl webhook processor'),
     'queue' => $queue,
-    'errorMode' => CRM_Queue_Runner::ERROR_CONTINUE,
+    // 'errorMode' => CRM_Queue_Runner::ERROR_CONTINUE,
     //'onEnd' => callback
     //'onEndUrl' => CRM_Utils_System::url('civicrm/demo-queue/done'),
   ]);

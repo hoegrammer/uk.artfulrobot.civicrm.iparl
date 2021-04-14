@@ -133,7 +133,22 @@ class CRM_Iparl_Page_IparlWebhook extends CRM_Core_Page {
    * Provided for Queue Task
    */
   public static function processQueueItem($queueTaskContext, $data) {
+
     $obj = new static();
+
+    // Check we can load the definitions.
+    try {
+      $obj->getIparlObject('action');
+      $obj->getIparlObject('petition');
+    }
+    catch (\Exception $e) {
+      // Tell the queue runner we had problems.
+      // This will stop it running. If we don't have the definitions there's no
+      // point running - it would create lots of iparl-webhooks-failed entries
+      // that are more of a pain to sort out.
+      return FALSE;
+    }
+
     $result = $obj->processWebhook($data);
     if (!$result) {
       // Processing this one failed.
@@ -150,7 +165,10 @@ class CRM_Iparl_Page_IparlWebhook extends CRM_Core_Page {
         "" // title
       ));
     }
-    return $result;
+
+    // We always return TRUE if we've run as we want the queue to continue for
+    // errors at a per-webhook level.
+    return TRUE;
   }
   /**
    * The main procesing method.
