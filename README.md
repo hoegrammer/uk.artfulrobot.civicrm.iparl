@@ -160,6 +160,10 @@ Futher pull requests welcome :-)
   requeued under a queue name of `iparl-webhooks-failed`. See "Warnings about
   failed webhooks" above.
 
+- Where a webhook includes a valid date time (e.g. `2020-10-01 12:34:56`) it
+  will be used for the activity date. This matters for the cases where there's
+  a delay between receiving the webhook and processing it.
+
 
 ### Version 1.4.0
 

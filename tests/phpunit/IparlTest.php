@@ -83,6 +83,7 @@ class IparlTest extends \PHPUnit\Framework\TestCase implements HeadlessInterface
       'phone'    => '01234 567890',
       'optin1'   => 1,
       'optin2'   => 1,
+      'date'     => '2021-02-03 12:34:56',
     ]);
     $this->assertTrue($result, "Expected success from processWebhook. Here's the log:\n" . implode("\n",$webhook->test_log));
 
@@ -119,12 +120,13 @@ class IparlTest extends \PHPUnit\Framework\TestCase implements HeadlessInterface
     $result = civicrm_api3('Activity', 'get',
       [
      'target_contact_id' => $contact_id,
-     'return'               => ["activity_type_id.name", 'subject'],
+     'return'               => ["activity_type_id.name", 'subject', 'activity_date_time'],
      'sequential'           => 1
       ]);
     $this->assertEquals(0, $result['is_error']);
     $this->assertEquals(1, $result['count']);
     $this->assertEquals('Action 123: Some demo action', $result['values'][0]['subject']);
+    $this->assertEquals('2021-02-03 12:34:56', $result['values'][0]['activity_date_time']);
 
 
     // Check that the hook was fired.

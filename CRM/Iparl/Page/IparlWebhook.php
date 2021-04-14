@@ -405,13 +405,17 @@ class CRM_Iparl_Page_IparlWebhook extends CRM_Core_Page {
     $activity_type_declaration= (int) civicrm_api3('OptionValue', 'getvalue',
       array( 'return' => "value", 'option_group_id' => "activity_type", 'name' => "iparl" ));
 
-    $params = array(
+    $params = [
       'activity_type_id'  => $activity_type_declaration,
       'target_id'         => $contact['id'],
       'source_contact_id' => $contact['id'],
       'subject'           => $subject,
       'details'           => '',
-    );
+    ];
+    if (preg_match('/^\d\d\d\d-\d\d-\d\d \d\d:\d\d:\d\d$/', $input['date'] ?? '')) {
+      // Date looks valid enough
+      $params['activity_date_time'] = $input['date'];
+    }
     $result = civicrm_api3('Activity', 'create', $params);
     return $result;
   }
