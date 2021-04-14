@@ -264,24 +264,33 @@ class IparlTest extends \PHPUnit\Framework\TestCase implements HeadlessInterface
     $this->mockIparlTitleLookup($calls, TRUE);
     $webhook->iparl_logging = 'phpunit';
 
-    $result = civicrm_api3('System', 'check');
-    $this->assertEquals(0, $result['is_error'] ?? 1);
+    // Abandoned the following approach in favour of narrowing the test to our own code.
+    // $result = civicrm_api3('System', 'check');
+    // $this->assertEquals(0, $result['is_error'] ?? 1);
+
+    $messages = [];
+    iparl_civicrm_check($messages);
+
     $found_missing_user = FALSE;
     $found_missing_key = FALSE;
     $found_failed_lookup = FALSE;
     $found_failed_webhook = FALSE;
-    foreach ($result['values'] ?? [] as $message) {
-      if ($message['name'] === 'iparl_missing_user') {
+    foreach ($messages as $message) {
+      switch ($message->getName()) {
+      case 'iparl_missing_user':
         $found_missing_user = TRUE;
-      }
-      elseif ($message['name'] === 'iparl_missing_webhook_key') {
+        break;
+      case 'iparl_missing_webhook_key':
         $found_missing_key = TRUE;
-      }
-      elseif ($message['name'] === 'iparl_api_fail') {
+        break;
+      case 'iparl_api_fail':
         $found_failed_lookup = TRUE;
-      }
-      elseif ($message['name'] === 'iparl_webhook_fail') {
+        break;
+      case 'iparl_webhook_fail':
         $found_failed_webhook = TRUE;
+        break;
+      default:
+        $this->fail("Unexpected message type returned by iparl_civicrm_check: " . $message->getName());
       }
     }
     $this->assertTrue($found_missing_key, 'Expected to find missing webhook key message in system checks');
@@ -334,34 +343,39 @@ class IparlTest extends \PHPUnit\Framework\TestCase implements HeadlessInterface
     // Check a failed API call is detected.
     // Mock title lookup to return NULL, i.e. api unavailable.
     $this->mockIparlTitleLookup($calls, NULL);
-    $result = civicrm_api3('System', 'check');
-    $this->assertEquals(0, $result['is_error'] ?? 1);
-    $found_missing_user = FALSE;
+
+    // Test this functionality:
+    $messages = [];
+    iparl_civicrm_check($messages);
+
     $found_failed_lookup = FALSE;
-    foreach ($result['values'] ?? [] as $message) {
-      if ($message['name'] === 'iparl_missing_user' && $message['severity'] === 'error') {
-        $found_missing_user = TRUE;
-      }
-      elseif ($message['name'] === 'iparl_api_fail' && $message['severity'] === 'error') {
+    foreach ($messages as $message) {
+      switch ($message->getName()) {
+      case 'iparl_missing_user':
+        $this->fail("Did not expect missing user message but got one.");
+        break;
+      case 'iparl_api_fail':
         $found_failed_lookup = TRUE;
+        break;
       }
     }
-    $this->assertFalse($found_missing_user, 'Did not expect missing user message but got one.');
     $this->assertTrue($found_failed_lookup, 'Expected to find failed API message in system checks');
 
     // Check an empty API call is detected.
     // Mock title lookup to return NULL, i.e. api unavailable.
     $this->mockIparlTitleLookup($calls, []);
-    $result = civicrm_api3('System', 'check');
-    $this->assertEquals(0, $result['is_error'] ?? 1);
+    // Test this functionality:
+    $messages = [];
+    iparl_civicrm_check($messages);
+
     $found_failed_lookup = FALSE;
-    foreach ($result['values'] ?? [] as $message) {
-      if ($message['name'] === 'iparl_api_fail' && $message['severity'] === 'notice') {
+    foreach ($messages as $message) {
+      if ($message->getName() === 'iparl_api_fail') {
         $found_failed_lookup = TRUE;
       }
     }
-    $this->assertTrue($found_failed_lookup, 'Expected to find failed API message in system checks for empty result');
 
+    $this->assertTrue($found_failed_lookup, 'Expected to find failed API message in system checks for empty result');
   }
 
 }
