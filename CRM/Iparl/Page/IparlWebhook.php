@@ -431,6 +431,8 @@ class CRM_Iparl_Page_IparlWebhook extends CRM_Core_Page {
       throw new Exception("getIparlObject \$type must be action or petition. Received " . json_encode($type));
     }
 
+    // @todo use static cache too.
+
     // do we have it in cache?
     // Note that this: $cache = Civi::cache(); defaults to a normal array, lost at the end of each request.
     $cache = CRM_Utils_Cache::create([

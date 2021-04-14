@@ -24,6 +24,20 @@ function _civicrm_api3_job_Processiparlwebhookqueue_spec(&$spec) {
  */
 function civicrm_api3_job_Processiparlwebhookqueue($params) {
 
+  // Ensure we have the latest definitions
+  try {
+    $webhook = new CRM_Iparl_Page_IparlWebhook();
+    $webhook->getIparlObject('action', TRUE);
+    $webhook->getIparlObject('petition', TRUE);
+  }
+  catch (\Exception $e) {
+    // Tell the queue runner we had problems.
+    // This will stop it running. If we don't have the definitions there's no
+    // point running - it would create lots of iparl-webhooks-failed entries
+    // that are more of a pain to sort out.
+    return ['processed' => 0, 'is_error' => 1, 'error_message' => "Failed to load iParl resource: " . $e->getMessage()];
+  }
+
   $queue = CRM_Queue_Service::singleton()->create([
     'type'  => 'Sql',
     'name'  => 'iparl-webhooks',
@@ -33,13 +47,12 @@ function civicrm_api3_job_Processiparlwebhookqueue($params) {
   // Note: we use ERROR_CONTINUE because if there's an error we copy the data
   // to a separate queue.
   $runner = new CRM_Queue_Runner([
-    'title' => ts('iParl webhook processor'),
-    'queue' => $queue,
+    'title'     => ts('iParl webhook processor'),
+    'queue'     => $queue,
     'errorMode' => CRM_Queue_Runner::ERROR_CONTINUE,
     //'onEnd' => callback
     //'onEndUrl' => CRM_Utils_System::url('civicrm/demo-queue/done'),
   ]);
-
 
   $max = (int) ($params['max_time'] ?? 0);
   if ($max > 0) {
