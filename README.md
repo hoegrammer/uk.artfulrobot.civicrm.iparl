@@ -82,6 +82,43 @@ of 10 minutes' procesing of the iParl queue at once. This should be ample time
 for most sites. You can change the schedule and the maximum execution time (in
 seconds) from the Scheduled Jobs admin page.
 
+### Warnings about failed webhooks
+
+Sometimes iParl sends us data that is not valid for our use case. e.g.
+a spammer enters a sentence about their wares into an address field and it's so
+long it won't fit.
+
+From v1.5.0 (see changelog below) these entries will be put in a new queue that
+never gets processed. The iParl log file will contain details of what the problem
+was from the intial processing.
+
+If any of these are found, the System Status page will show warnings.
+
+If you get one or two, you might choose to ignore these. If you get lots then
+you will need a technical person to inspect the dedicated log file created by
+this extension in the ConfigAndLog directory to see what is causing the
+problems. They can then add code to handle those situations better (please
+submit a Pull Request back to the project if you do make improvements), or
+you can [commission me to do this work](https://artfulrobot.uk/contact).
+
+Note that the failure could also come from outside this extension, e.g. any
+custom processing you have put in place, e.g. using the provided hook, or
+additional features like CiviRules.
+
+If you intend to ignore these you can hide the System Status message in the normal way.
+
+Technically, you will need to do one of the following (after taking a backup):
+
+1. Delete the problem submissions by running this SQL:  
+   `DELETE FROM civicrm_queue_item WHERE queue_name = 'iparl-webhooks-failed';`
+
+2. Add the problem submissions back on the queue (e.g. if you believe they will
+   work now) by running this SQL:  
+   `UPDATE civicrm_queue_item WHERE SET queue_name = 'iparl-webhooks' WHERE queue_name = 'iparl-webhooks-failed';`
+   (If they fail *again* then they will be recreated as a
+   `iparl-webhooks-failed` record again.)
+
+
 ## Developers
 
 There's now (since 1.3) a hook you can use to do your own processing of the
@@ -115,6 +152,14 @@ has been funded by the Equality Trust and We Own It.
 Futher pull requests welcome :-)
 
 ## Changelog
+
+### Version 1.5.0
+
+- Queued webhooks that cause a crash (e.g. extra long data in address fields or
+  such) will no longer cause the entire queue to hang. Instead they will be
+  requeued under a queue name of `iparl-webhooks-failed`. See "Warnings about
+  failed webhooks" above.
+
 
 ### Version 1.4.0
 

@@ -251,5 +251,14 @@ function iparl_civicrm_check(&$messages) {
 
   }
 
+  $errorCount = CRM_Core_DAO::singleValueQuery("SELECT COUNT(*) FROM civicrm_queue_item WHERE queue_name = 'iparl-webhooks-failed';");
+  if ($errorCount > 0) {
+    $messages[] = new CRM_Utils_Check_Message(
+        'iparl_webhook_fail',
+        "<p>The iParl extension found $errorCount un-processable webhook submissions. This can be the case if someone puts spam data into the iParl forms and it passes it along to us. These submissions have not been (fully) processed and you will find details in the iParl log file.</p>",
+        'iParl Webhook errors found',
+        'warning'
+      );
+  }
 }
 

@@ -269,6 +269,7 @@ class IparlTest extends \PHPUnit\Framework\TestCase implements HeadlessInterface
     $found_missing_user = FALSE;
     $found_missing_key = FALSE;
     $found_failed_lookup = FALSE;
+    $found_failed_webhook = FALSE;
     foreach ($result['values'] ?? [] as $message) {
       if ($message['name'] === 'iparl_missing_user') {
         $found_missing_user = TRUE;
@@ -279,10 +280,45 @@ class IparlTest extends \PHPUnit\Framework\TestCase implements HeadlessInterface
       elseif ($message['name'] === 'iparl_api_fail') {
         $found_failed_lookup = TRUE;
       }
+      elseif ($message['name'] === 'iparl_webhook_fail') {
+        $found_failed_webhook = TRUE;
+      }
     }
     $this->assertTrue($found_missing_key, 'Expected to find missing webhook key message in system checks');
     $this->assertTrue($found_missing_user, 'Expected to find missing username message in system checks');
-    $this->assertFalse($found_failed_lookup, 'Expected to not find failed API message in system checks');
+    $this->assertFalse($found_failed_lookup, 'Expected not to find failed API message in system checks');
+    $this->assertFalse($found_failed_webhook, 'Expected not to find iparl_webhook_fail in system checks');
+
+  }
+  public function testChecksReportFailedWebhooks() {
+
+    $queue = CRM_Queue_Service::singleton()->create([
+      'type'  => 'Sql',
+      'name'  => 'iparl-webhooks-failed',
+      'reset' => FALSE, // We do NOT want to delete an existing queue!
+    ]);
+    $queue->createItem(new CRM_Queue_Task(
+      ['CRM_Iparl_Page_IparlWebhook', 'processQueueItem'], // callback
+      [['the' => 'data']], // arguments
+      "" // title
+    ));
+    $messages = [];
+
+    // The functionality we're testing:
+    iparl_civicrm_check($messages);
+
+    $notFound = TRUE;
+    foreach ($messages as $message) {
+      if ($message->getName() === 'iparl_webhook_fail') {
+        $notFound = FALSE;
+        $this->assertEquals("<p>The iParl extension found 1 un-processable webhook submissions. This can be the case if someone puts spam data into the iParl forms and it passes it along to us. These submissions have not been (fully) processed and you will find details in the iParl log file.</p>",
+          $message->getMessage()
+        );
+        $this->assertEquals('iParl Webhook errors found', $message->getTitle());
+        break;
+      }
+    }
+    $this->assertFalse($notFound, "Expected an iparl_webhook_fail message but found none.");
 
   }
   /**
