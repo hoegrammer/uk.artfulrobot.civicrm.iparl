@@ -30,10 +30,12 @@ function civicrm_api3_job_Processiparlwebhookqueue($params) {
     'reset' => FALSE, // We do NOT want to delete an existing queue!
   ]);
 
+  // Note: we use ERROR_CONTINUE because if there's an error we copy the data
+  // to a separate queue.
   $runner = new CRM_Queue_Runner([
     'title' => ts('iParl webhook processor'),
     'queue' => $queue,
-    //'errorMode' => CRM_Queue_Runner::ERROR_CONTINUE,
+    'errorMode' => CRM_Queue_Runner::ERROR_CONTINUE,
     //'onEnd' => callback
     //'onEndUrl' => CRM_Utils_System::url('civicrm/demo-queue/done'),
   ]);
@@ -48,28 +50,37 @@ function civicrm_api3_job_Processiparlwebhookqueue($params) {
   }
 
   $processed = 0;
-  $error = 0;
+  $errors = [];
   do {
     $result = $runner->runNext(false);
     if ($result['is_error']) {
-      if ($result['exception']->getMessage() === 'Failed to claim next task') {
-        // Queue empty, or another process busy.
-        // This is not an error to us.
-        break;
+      if ($result['exception'] !== NULL) {
+        $msg = $result['exception']->getMessage();
+        if ($msg === 'Failed to claim next task') {
+          // Queue empty, or another process busy.
+          // This is not an error to us, but we need to stop processing.
+          break;
+        }
+        else {
+          // Some other exception.
+          $errors[] = $result['exception']->getMessage();
+        }
       }
       else {
-        // Some other exception.
-        $error = 1;
-        break;
+        $errors[] = "Non-exception error encountered.";
       }
     }
     else {
+      // Success
       $processed++;
     }
     if (!$result['is_continue']) {
-      break; //all items in the queue are processed, or one failed.
+      break; //all items in the queue are processed.
     }
   } while (!$maxRunTime || time() < $maxRunTime);
 
-  return ['processed' => $processed, 'is_error' => $error];
+  if ($errors) {
+    return ['processed' => $processed, 'is_error' => 1, 'error_message' => implode("\n", $errors)];
+  }
+  return ['processed' => $processed, 'is_error' => 0];
 }

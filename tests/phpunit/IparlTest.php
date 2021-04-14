@@ -5,6 +5,8 @@ use Civi\Test\HeadlessInterface;
 use Civi\Test\HookInterface;
 use Civi\Test\TransactionalInterface;
 
+require_once __DIR__ . '/shared.php';
+
 /**
  * Test basic webhooks
  *
@@ -19,28 +21,21 @@ use Civi\Test\TransactionalInterface;
  *
  * @group headless
  */
-class iparlTest extends \PHPUnit\Framework\TestCase implements HeadlessInterface, HookInterface, TransactionalInterface {
+class IparlTest extends \PHPUnit\Framework\TestCase implements HeadlessInterface, HookInterface, TransactionalInterface {
+  use IparlShared;
 
   public function setUpHeadless() {
+
+    // We need a clean place to start from in case the messy QueueTest has run before us
+    static $initialReset = FALSE;
     // Civi\Test has many helpers, like install(), uninstall(), sql(), and sqlFile().
     // See: https://docs.civicrm.org/dev/en/latest/testing/phpunit/#civitest
-    return \Civi\Test::headless()
+    $r = \Civi\Test::headless()
       ->installMe(__DIR__)
-      ->apply();
-  }
+      ->apply($initialReset);
+    $initialReset = FALSE;
 
-  public function setUp() {
-    parent::setUp();
-    Civi::settings()->set('iparl_logging', 1);
-  }
-
-  public function setMockIParlSetting() {
-    Civi::settings()->set('iparl_webhook_key', 'helloHorseHeadLikeYourJumper');
-    Civi::settings()->set('iparl_user_name', 'superfoo');
-  }
-
-  public function tearDown() {
-    parent::tearDown();
+    return $r;
   }
 
   /**
@@ -333,83 +328,4 @@ class iparlTest extends \PHPUnit\Framework\TestCase implements HeadlessInterface
 
   }
 
-  /**
-   * For testing purposes.
-   *
-   * @param int &$calls Counts times it was called.
-   * @param mixed $fail. If given and not FALSE, this is the value that any
-   * simplexml_load_file call will return. Useful for returning null or []
-   */
-  public function mockIparlTitleLookup(&$calls, $fail=FALSE) {
-    // Mock the iParl XML API.
-    if ($fail !== FALSE) {
-      CRM_Iparl_Page_IparlWebhook::$simplexml_load_file = function($url, $a, $b) use (&$calls, $fail) {
-        $calls++;
-        return $fail;
-      };
-    }
-    else {
-      CRM_Iparl_Page_IparlWebhook::$simplexml_load_file = function($url, $a, $b) use(&$calls) {
-        $calls++;
-        switch ($url) {
-        case "https://iparlsetup.com/api/superfoo/petitions":
-          return simplexml_load_string('<?xml version="1.0"?><xml>
-  <petition><title>Some demo petition</title><id>456</id></petition>
-  <petition><title>Another demo petition</title><id>678</id></petition>
-  </xml>');
-          break;
-
-        case "https://iparlsetup.com/api/superfoo/actions.xml":
-          return simplexml_load_string('<?xml version="1.0"?><xml>
-  <action><title>Some demo action</title><id>123</id></action>
-  <action><title>Another demo action</title><id>234</id></action>
-  </xml>');
-          break;
-
-        default:
-          throw new \Exception("unexpected URL: $url");
-        }
-      };
-    }
-  }
-  public function assertArrayRegex($expected, $actual) {
-    $errors = [];
-    $this->assertInternalType('array', $actual);
-    foreach ($expected as $i => $pattern) {
-      if (!isset($actual[$i])) {
-        $errors[] = "- $i => $pattern\n";
-        $errors[] = "+ $i => (MISSING)\n";
-      }
-      elseif (substr($pattern, 0, 1) === '/') {
-        // regex match.
-        if (!preg_match($pattern, $actual[$i])) {
-          $errors[] = "- $i => $pattern\n";
-          $errors[] = "+ $i => {$actual[$i]}\n";
-        }
-      }
-      else {
-        // String match.
-        if ($pattern !== $actual[$i]) {
-          $errors[] = "- $i => $pattern\n";
-          $errors[] = "+ $i => {$actual[$i]}\n";
-        }
-      }
-    }
-    $errors = implode('', $errors);
-    if ($errors) {
-      $this->fail($errors);
-    }
-  }
-}
-
-/**
- * Implement a hook.
- */
-function iparl_civicrm_iparl_webhook_post_process($contact, $activity, $webhook_data) {
-  global $iparl_hook_test;
-  $iparl_hook_test = [
-    'contact' => $contact,
-    'activity' => $activity,
-    'webhook_data' => $webhook_data
-  ];
 }

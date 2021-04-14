@@ -95,7 +95,7 @@ class CRM_Iparl_Page_IparlWebhook extends CRM_Core_Page {
       }
 
       // Check secret.
-      $key = civicrm_api3('Setting', 'getvalue', array( 'name' => "iparl_webhook_key" ));
+      $key = Civi::settings()->get("iparl_webhook_key");
       if (empty($key)) {
         throw new Exception("iParl secret not configured.");
       }
@@ -134,7 +134,23 @@ class CRM_Iparl_Page_IparlWebhook extends CRM_Core_Page {
    */
   public static function processQueueItem($queueTaskContext, $data) {
     $obj = new static();
-    return $obj->processWebhook($data);
+    $result = $obj->processWebhook($data);
+    if (!$result) {
+      // Processing this one failed.
+      // We'll add it to another queue called 'iparl-webhook-failed' so the
+      // data is not lost completely, but note that this queue has no runner(!)
+      $queue = CRM_Queue_Service::singleton()->create([
+        'type'  => 'Sql',
+        'name'  => 'iparl-webhooks-failed',
+        'reset' => FALSE, // We do NOT want to delete an existing queue!
+      ]);
+      $queue->createItem(new CRM_Queue_Task(
+        ['CRM_Iparl_Page_IparlWebhook', 'processQueueItem'], // callback
+        [$data], // arguments
+        "" // title
+      ));
+    }
+    return $result;
   }
   /**
    * The main procesing method.
@@ -150,6 +166,7 @@ class CRM_Iparl_Page_IparlWebhook extends CRM_Core_Page {
       $this->iparlLog("Processing queued webhook: " . json_encode($data));
       $start = microtime(TRUE);
       $this->parseNames($data);
+      //throw new \Exception('test');
       $contact = $this->findOrCreate($data);
       $this->mergePhone($data, $contact);
       $this->mergeAddress($data, $contact);
