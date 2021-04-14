@@ -24,18 +24,14 @@ function _civicrm_api3_job_Processiparlwebhookqueue_spec(&$spec) {
  */
 function civicrm_api3_job_Processiparlwebhookqueue($params) {
 
-  // Ensure we have the latest definitions
-  try {
-    $webhook = new CRM_Iparl_Page_IparlWebhook();
-    $webhook->getIparlObject('action', TRUE);
-    $webhook->getIparlObject('petition', TRUE);
-  }
-  catch (\Exception $e) {
-    // Tell the queue runner we had problems.
-    // This will stop it running. If we don't have the definitions there's no
-    // point running - it would create lots of iparl-webhooks-failed entries
-    // that are more of a pain to sort out.
-    return ['processed' => 0, 'is_error' => 1, 'error_message' => "Failed to load iParl resource: " . $e->getMessage()];
+  // Ensure we have the latest definitions If we don't have the definitions
+  // there's no point running - it would create lots of iparl-webhooks-failed
+  // entries that are more of a pain to sort out.
+  $webhook = new CRM_Iparl_Page_IparlWebhook();
+  foreach (['action', 'petition'] as $type) {
+    if ($webhook->getIparlObject($type, TRUE) === NULL) {
+      return ['processed' => 0, 'is_error' => 1, 'error_message' => "Failed to load iParl resource: $type"];
+    }
   }
 
   $queue = CRM_Queue_Service::singleton()->create([
