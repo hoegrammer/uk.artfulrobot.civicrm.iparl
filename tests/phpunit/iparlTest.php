@@ -19,7 +19,7 @@ use Civi\Test\TransactionalInterface;
  *
  * @group headless
  */
-class iparlTest extends \PHPUnit_Framework_TestCase implements HeadlessInterface, HookInterface, TransactionalInterface {
+class iparlTest extends \PHPUnit\Framework\TestCase implements HeadlessInterface, HookInterface, TransactionalInterface {
 
   public function setUpHeadless() {
     // Civi\Test has many helpers, like install(), uninstall(), sql(), and sqlFile().
@@ -31,6 +31,7 @@ class iparlTest extends \PHPUnit_Framework_TestCase implements HeadlessInterface
 
   public function setUp() {
     parent::setUp();
+    Civi::settings()->set('iparl_logging', 1);
   }
 
   public function setMockIParlSetting() {
@@ -88,7 +89,7 @@ class iparlTest extends \PHPUnit_Framework_TestCase implements HeadlessInterface
       'optin1'   => 1,
       'optin2'   => 1,
     ]);
-    $this->assertTrue($result);
+    $this->assertTrue($result, "Expected success from processWebhook. Here's the log:\n" . implode("\n",$webhook->test_log));
 
     // There should now be a contact for Wilma
     $result = civicrm_api3('Contact', 'get', ['email' => 'wilma@example.com', 'first_name' => 'Wilma', 'last_name' => 'Flintstone']);
@@ -97,11 +98,12 @@ class iparlTest extends \PHPUnit_Framework_TestCase implements HeadlessInterface
     $contact_id = current($result['values'])['id'];
 
     $this->assertArrayRegex([
+      "/^Processing queued webhook: .*/",
       "Created contact $contact_id because email was not found.",
       "Created phone",
       "Created address",
       "Cache miss on looking up iparl_titles_action",
-      "Caching 2 results from https://iparlsetup.com/api/superfoo/actions for 1 hour.",
+      "Caching 2 results from https://iparlsetup.com/api/superfoo/actions.xml for 1 hour.",
       "/^Successfully created\/updated contact $contact_id in \d+(\.\d+)?s$/",
     ], $webhook->test_log, "Failed testing that a new contact was created.");
 
@@ -161,6 +163,7 @@ class iparlTest extends \PHPUnit_Framework_TestCase implements HeadlessInterface
     $this->assertEquals($contact_id, current($result['values'])['id']);
 
     $this->assertArrayRegex([
+      "/^Processing queued webhook: .*/",
       "Found contact $contact_id by email match.",
       "Phone already present",
       "Address already existed.",
@@ -356,7 +359,7 @@ class iparlTest extends \PHPUnit_Framework_TestCase implements HeadlessInterface
   </xml>');
           break;
 
-        case "https://iparlsetup.com/api/superfoo/actions":
+        case "https://iparlsetup.com/api/superfoo/actions.xml":
           return simplexml_load_string('<?xml version="1.0"?><xml>
   <action><title>Some demo action</title><id>123</id></action>
   <action><title>Another demo action</title><id>234</id></action>

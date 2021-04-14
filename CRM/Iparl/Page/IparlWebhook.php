@@ -62,7 +62,7 @@ class CRM_Iparl_Page_IparlWebhook extends CRM_Core_Page {
 
     if (!isset($this->iparl_logging)) {
       // Look up logging setting and cache it.
-      $this->iparl_logging = (int) civicrm_api3('Setting', 'getvalue', array( 'name' => "iparl_logging", 'group' => 'iParl Integration Settings' ));
+      $this->iparl_logging = (int) Civi::settings()->get('iparl_logging');
     }
     if (!$this->iparl_logging) {
       // Logging disabled.
@@ -162,7 +162,7 @@ class CRM_Iparl_Page_IparlWebhook extends CRM_Core_Page {
       $start = microtime(TRUE);
       $unused = CRM_Utils_Hook::$_nullObject;
       CRM_Utils_Hook::singleton()->invoke(
-        3, // Number of useful arguments.
+        ['conactID', 'activity', 'data'], // Named useful arguments.
         $contact, $activity, $data, $unused, $unused, $unused,
         'civicrm_iparl_webhook_post_process');
       $took = round(microtime(TRUE) - $start, 3);
