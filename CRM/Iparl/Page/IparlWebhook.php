@@ -167,19 +167,20 @@ class CRM_Iparl_Page_IparlWebhook extends CRM_Core_Page {
       $start = microtime(TRUE);
       $this->parseNames($data);
       //throw new \Exception('test');
-      $contact = $this->findOrCreate($data);
-      $this->mergePhone($data, $contact);
-      $this->mergeAddress($data, $contact);
-      $activity = $this->recordActivity($data, $contact);
+      $contactID = $this->findOrCreate($data);
+      $this->mergePhone($data, $contactID);
+      $this->mergeAddress($data, $contactID);
+      $activity = $this->recordActivity($data, $contactID);
       $took = round(microtime(TRUE) - $start, 3);
-      $this->iparlLog("Successfully created/updated contact $contact[id] in {$took}s");
+      $this->iparlLog("Successfully created/updated contact $contactID in {$took}s");
 
       // Issue #2
       // Provide a hook for custom action on the incoming data.
       $start = microtime(TRUE);
       $unused = CRM_Utils_Hook::$_nullObject;
+      $contact = ['id' => $contactID];
       CRM_Utils_Hook::singleton()->invoke(
-        ['conactID', 'activity', 'data'], // Named useful arguments.
+        ['contact', 'activity', 'data'], // Named useful arguments.
         $contact, $activity, $data, $unused, $unused, $unused,
         'civicrm_iparl_webhook_post_process');
       $took = round(microtime(TRUE) - $start, 3);
@@ -240,68 +241,73 @@ class CRM_Iparl_Page_IparlWebhook extends CRM_Core_Page {
       throw new Exception("iParl webhook requires data in the 'name' field.");
     }
   }
-  public function findOrCreate($input) {
-    // Look up the email first.
-    $result = civicrm_api3('Email', 'get', array(
-      'sequential' => 1,
-      'email' => $input['email'],
-      'api.Contact.get' => array(),
-    ));
+  /**
+   * Returns a contactID
+   */
+  public function findOrCreate($input) :int {
+    $result = \Civi\Api4\Email::get(FALSE)
+      ->addSelect('contact_id', 'contact.first_name', 'contact.last_name')
+      ->setJoin([['Contact AS contact', TRUE, NULL, ['contact.is_deleted', '=', 0], ['contact.is_deceased', '=', 0]]])
+      ->addWhere('email', '=', $input['email'])
+      ->execute();
 
-    if ($result['count'] == 0) {
-      $result =  $this->createContact($input);
-      $this->iparlLog("Created contact $result[id] because email was not found.");
-      return $result;
+    if (!$result->count()) {
+      $contactID = (int) $this->createContact($input)['id'];
+      $this->iparlLog("Created contact $contactID because email was not found.");
+      return $contactID;
     }
-    elseif ($result['count'] == 1) {
+    elseif ($result->count() === 1) {
       // Single email found.
-      $result =  $result['values'][0]['api.Contact.get']['values'][0];
-      $this->iparlLog("Found contact $result[id] by email match.");
-      return $result;
+      $contactID = (int) ($result->first()['contact_id']);
+      $this->iparlLog("Found contact $contactID by email match.");
+      return $contactID;
     }
     // Left with the case that the email is in there multiple times.
-    // Could be the same contact each time. We'll go for the first contact whose
     // name matches.
     $unique_contacts = array();
-    foreach ($result['values'] as $email_record) {
-      foreach ($email_record['api.Contact.get']['values'] as $c) {
-        $unique_contacts[$c['contact_id']] = $c;
-      }
+    foreach ($result as $row) {
+      $unique_contacts[(int) $row['contact_id']] = $row;
     }
-    foreach ($unique_contacts as $contact_id => $contact) {
-      if ($this->first_name == $contact['first_name']
-        && (!empty($this->last_name) && $this->last_name == $contact['last_name'])) {
+    // Could be the same contact each time.
+    if (count($unique_contacts) === 1) {
+      return array_keys($unique_contacts)[0];
+    }
+
+    // We'll go for the first contact whose
+    foreach ($unique_contacts as $contactID => $row) {
+      if ($this->first_name == $row['contact.first_name']
+        && (!empty($this->last_name) && $this->last_name == $row['contact.last_name'])) {
         // Found a match on name and email, return that.
-        $this->iparlLog("Found contact $contact[id] by email and name match.");
-        return $contact;
+        $this->iparlLog("Found contact $contactID by email and name match.");
+        return $contactID;
       }
     }
 
     // If we were unable to match on first and last name, try last name only.
     if ($this->last_name) {
-      foreach ($unique_contacts as $contact_id => $contact) {
-        if ($this->last_name == $contact['last_name']) {
+      foreach ($unique_contacts as $contactID => $row) {
+        if ($this->last_name == $row['contact.last_name']) {
           // Found a match on last name and email, return that.
-          $this->iparlLog("Found contact $contact[id] by email and last name match.");
-          return $contact;
+          $this->iparlLog("Found contact $contactID by email and last name match.");
+          return $contactID;
         }
       }
     }
 
     // If we were unable to match on first and last name, try first name only.
-    foreach ($unique_contacts as $contact_id => $contact) {
-      if ($this->first_name == $contact['first_name']) {
+    foreach ($unique_contacts as $contactID => $row) {
+      if ($this->first_name == $row['contact.first_name']) {
         // Found a match on last name and email, return that.
-        $this->iparlLog("Found contact $contact[id] by email and first name match.");
-        return $contact;
+        $this->iparlLog("Found contact $contactID by email and first name match.");
+        return $contactID;
       }
     }
 
     // We know the email, but we think it belongs to someone else.
     // Create new contact.
-    $result = $this->createContact($input);
-    $this->iparlLog("Created contact $result[id] because could not match on email and name \n" . json_encode($result));
-    return $result;
+    $contactID = (int) ($this->createContact($input)['id']);
+    $this->iparlLog("Created contact $contactID because could not match on email and name");
+    return $contactID;
   }
   /**
    * Create a contact.
@@ -319,7 +325,7 @@ class CRM_Iparl_Page_IparlWebhook extends CRM_Core_Page {
   /**
    * Ensure we have their phone number.
    */
-  public function mergePhone($input, $contact) {
+  public function mergePhone($input, int $contactID) {
     if (empty($input['phone'])) {
       return;
     }
@@ -329,14 +335,14 @@ class CRM_Iparl_Page_IparlWebhook extends CRM_Core_Page {
     }
     // Does this phone exist already?
     $result = civicrm_api3('Phone', 'get', array(
-      'contact_id' => $contact['id'],
+      'contact_id' => $contactID,
       'phone_numeric' => $phone_numeric,
     ));
     if ($result['count'] == 0) {
       // Create the phone.
       $this->iparlLog("Created phone");
       $result = civicrm_api3('Phone', 'create', array(
-        'contact_id' => $contact['id'],
+        'contact_id' => $contactID,
         'phone' => $input['phone'],
       ));
     }
@@ -347,7 +353,7 @@ class CRM_Iparl_Page_IparlWebhook extends CRM_Core_Page {
   /**
    * Ensure we have their address.
    */
-  public function mergeAddress($input, $contact) {
+  public function mergeAddress($input, int $contactID) {
     if (empty($input['address1']) || empty($input['town']) || empty($input['postcode'])) {
       // Not enough input.
       return;
@@ -360,7 +366,7 @@ class CRM_Iparl_Page_IparlWebhook extends CRM_Core_Page {
     }
     // Does this address exist already?
     $result = civicrm_api3('Address', 'get', array(
-      'contact_id' => $contact['id'],
+      'contact_id' => $contactID,
       'street_address' => $input['address1'],
       'city' => $input['town'],
       'postal_code' => $input['postcode'],
@@ -369,7 +375,7 @@ class CRM_Iparl_Page_IparlWebhook extends CRM_Core_Page {
       // Create the address.
       $result = civicrm_api3('Address', 'create', array(
         'location_type_id' => "Home",
-        'contact_id' => $contact['id'],
+        'contact_id' => $contactID,
         'street_address' => $input['address1'],
         'city' => $input['town'],
         'postal_code' => $input['postcode'],
@@ -383,7 +389,7 @@ class CRM_Iparl_Page_IparlWebhook extends CRM_Core_Page {
   /**
    * Record the activity.
    */
-  public function recordActivity($input, $contact) {
+  public function recordActivity($input, int $contactID) {
 
     // 'actiontype' key is not present for Lobby Actions, but is present and set to petition for petitions.
     $is_petition = (!empty($input['actiontype']) && $input['actiontype'] === 'petition');
@@ -407,8 +413,8 @@ class CRM_Iparl_Page_IparlWebhook extends CRM_Core_Page {
 
     $params = [
       'activity_type_id'  => $activity_type_declaration,
-      'target_id'         => $contact['id'],
-      'source_contact_id' => $contact['id'],
+      'target_id'         => $contactID,
+      'source_contact_id' => $contactID,
       'subject'           => $subject,
       'details'           => '',
     ];
@@ -455,7 +461,18 @@ class CRM_Iparl_Page_IparlWebhook extends CRM_Core_Page {
           // Successfully downloaded data.
           $data = [];
           if (isset($file[$type])) {
-            foreach (is_array($file[$type]) ? $file[$type] : [$file[$type]] as $item) {
+            // This will either contain: {item} or [{item}, {item}]
+            if (isset($file[$type]['title'])) {
+              // We have the first form. Wrap it in an array.
+              $list = [$file[$type]];
+            }
+            else {
+              $list = $file[$type];
+            }
+            foreach ($list as $item) {
+              if (!is_array($item)) {
+                Civi::log()->error("Expected to get an array item inside $type but didn't. Got this:\n" . json_encode($file, JSON_PRETTY_PRINT|JSON_UNESCAPED_SLASHES));
+              }
               $data[$item['id']] = $item['title'];
             }
           }
