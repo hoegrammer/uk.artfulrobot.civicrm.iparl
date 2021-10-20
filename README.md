@@ -114,7 +114,7 @@ Technically, you will need to do one of the following (after taking a backup):
 
 2. Add the problem submissions back on the queue (e.g. if you believe they will
    work now) by running this SQL:  
-   `UPDATE civicrm_queue_item WHERE SET queue_name = 'iparl-webhooks' WHERE queue_name = 'iparl-webhooks-failed';`
+   `UPDATE civicrm_queue_item SET queue_name = 'iparl-webhooks' WHERE queue_name = 'iparl-webhooks-failed';`
    (If they fail *again* then they will be recreated as a
    `iparl-webhooks-failed` record again.)
 
