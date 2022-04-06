@@ -152,6 +152,7 @@ class CRM_Iparl_Page_IparlWebhook extends CRM_Core_Page {
     }
     return $result;
   }
+
   /**
    * The main procesing method.
    *
@@ -165,26 +166,39 @@ class CRM_Iparl_Page_IparlWebhook extends CRM_Core_Page {
     try {
       $this->iparlLog("Processing queued webhook: " . json_encode($data));
       $start = microtime(TRUE);
-      $this->parseNames($data);
-      //throw new \Exception('test');
-      $contactID = $this->findOrCreate($data);
-      $this->mergePhone($data, $contactID);
-      $this->mergeAddress($data, $contactID);
-      $activity = $this->recordActivity($data, $contactID);
-      $took = round(microtime(TRUE) - $start, 3);
-      $this->iparlLog("Successfully created/updated contact $contactID in {$took}s");
 
-      // Issue #2
-      // Provide a hook for custom action on the incoming data.
-      $start = microtime(TRUE);
+      // Provide a hook for acting on the raw data
       $unused = CRM_Utils_Hook::$_nullObject;
-      $contact = ['id' => $contactID];
+      $status = ['do_not_import' => FALSE, 'reason_not_to_import' => ''];
+      $subject = $this->getActivitySubject($data);
       CRM_Utils_Hook::singleton()->invoke(
-        ['contact', 'activity', 'data'], // Named useful arguments.
-        $contact, $activity, $data, $unused, $unused, $unused,
-        'civicrm_iparl_webhook_post_process');
-      $took = round(microtime(TRUE) - $start, 3);
-      $this->iparlLog("Processed hook_civicrm_iparl_webhook_post_process in {$took}s");
+        ['data', 'subject', 'status'], // Named useful arguments.
+        $data, $subject, $status, $unused, $unused, $unused,
+        'civicrm_iparl_webhook_process_custom');
+      // if the hook implementation has already done the importing, or does not want it to be imported for some reason, it will set this to true
+      if ($status['do_not_import']) {
+        $this->iparlLog("Not importing data because custom hook says: " . $status['reason_not_to_import']);
+      } else {
+        $this->parseNames($data);
+        $contactID = $this->findOrCreate($data);
+        $this->mergePhone($data, $contactID);
+        $this->mergeAddress($data, $contactID);
+        $activity = $this->recordActivity($data, $contactID, $subject);
+        $took = round(microtime(TRUE) - $start, 3);
+        $this->iparlLog("Successfully created/updated contact $contactID in {$took}s");
+
+        // Issue #2
+        // Provide a hook for custom action on the incoming data after creating the contact and activity.
+        $start = microtime(TRUE);
+        $unused = CRM_Utils_Hook::$_nullObject;
+        $contact = ['id' => $contactID];
+        CRM_Utils_Hook::singleton()->invoke(
+          ['contact', 'activity', 'data'], // Named useful arguments.
+          $contact, $activity, $data, $unused, $unused, $unused,
+          'civicrm_iparl_webhook_post_process');
+        $took = round(microtime(TRUE) - $start, 3);
+        $this->iparlLog("Processed hook_civicrm_iparl_webhook_post_process in {$took}s");
+      }
     }
     catch (\Exception $e) {
       $this->iparlLog("Failed processing: " . $e->getMessage());
@@ -193,6 +207,24 @@ class CRM_Iparl_Page_IparlWebhook extends CRM_Core_Page {
 
     return TRUE;
   }
+
+  private function getActivitySubject($input) {
+    // 'actiontype' key is not present for Lobby Actions, but is present and set to petition for petitions.
+    $is_petition = (!empty($input['actiontype']) && $input['actiontype'] === 'petition');
+
+    $subject = ($is_petition ? 'Petition' : 'Action') . " $input[actionid]";
+    if (!empty($input['actionid'])) {
+      $lookup = $this->getIparlObject($is_petition ? 'petition' : 'action');
+      if (isset($lookup[$input['actionid']])) {
+        $subject .= ": " . $lookup[$input['actionid']];
+      }
+      else {
+        throw new \Exception("Failed to lookup data for actionid " . $input['actionid']);
+      }
+    }
+    return $subject;
+  }
+
 
   /**
    * Ensure we have name data in incoming data.
@@ -389,21 +421,7 @@ class CRM_Iparl_Page_IparlWebhook extends CRM_Core_Page {
   /**
    * Record the activity.
    */
-  public function recordActivity($input, int $contactID) {
-
-    // 'actiontype' key is not present for Lobby Actions, but is present and set to petition for petitions.
-    $is_petition = (!empty($input['actiontype']) && $input['actiontype'] === 'petition');
-
-    $subject = ($is_petition ? 'Petition' : 'Action') . " $input[actionid]";
-    if (!empty($input['actionid'])) {
-      $lookup = $this->getIparlObject($is_petition ? 'petition' : 'action');
-      if (isset($lookup[$input['actionid']])) {
-        $subject .= ": " . $lookup[$input['actionid']];
-      }
-      else {
-        throw new \Exception("Failed to lookup data for actionid.");
-      }
-    }
+  public function recordActivity($input, int $contactID, $subject) {
 
     $activity_target_type = (int) civicrm_api3('OptionValue', 'getvalue',
       array( 'return' => "value", 'option_group_id' => "activity_contacts", 'name' => "Activity Targets" ));
